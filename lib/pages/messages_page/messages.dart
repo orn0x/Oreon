@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:polygone_app/pages/messages_page/widget/card.dart';
-
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:polygone_app/pages/const/navigatorbar.dart';
 import 'widget/appbar.dart';
 
 class Messages extends StatefulWidget {
@@ -18,6 +18,18 @@ class _MessagesState extends State<Messages> {
     Message_t(id: 4, name: "Diana", message: "See you soon!", time: "10:15 AM" , nbrNewMessages: 3, isOnline: true),
     Message_t(id: 5, name: "Eve", message: "Goodbye!", time: "10:20 AM" , nbrNewMessages: 0 , isOnline: false),
     Message_t(id: 6, name: "Rest", message: "Taking a break", time: "10:25 AM" , nbrNewMessages: 0 , isOnline: false),
+    Message_t(id: 7, name: "Alice", message: "Hello!", time: "10:00 AM" , nbrNewMessages: 2, isOnline: true),
+    Message_t(id: 8, name: "Bob", message: "How are you?", time: "10:05 AM" , nbrNewMessages: 1, isTyping: true),
+    Message_t(id: 9, name: "Charlie", message: "Let's meet up.", time: "10:10 AM" , nbrNewMessages: 0 , isOnline: false),
+    Message_t(id: 10, name: "Diana", message: "See you soon!", time: "10:15 AM" , nbrNewMessages: 3, isOnline: true),
+    Message_t(id: 11, name: "Eve", message: "Goodbye!", time: "10:20 AM" , nbrNewMessages: 0 , isOnline: false),
+    Message_t(id: 12, name: "Rest", message: "Taking a break", time: "10:25 AM" , nbrNewMessages: 0 , isOnline: false),
+    Message_t(id: 13, name: "Alice", message: "Hello!", time: "10:00 AM" , nbrNewMessages: 2, isOnline: true),
+    Message_t(id: 14, name: "Bob", message: "How are you?", time: "10:05 AM" , nbrNewMessages: 1, isTyping: true),
+    Message_t(id: 15, name: "Charlie", message: "Let's meet up.", time: "10:10 AM" , nbrNewMessages: 0 , isOnline: false),
+    Message_t(id: 16, name: "Diana", message: "See you soon!", time: "10:15 AM" , nbrNewMessages: 3, isOnline: true),
+    Message_t(id: 17, name: "Eve", message: "Goodbye!", time: "10:20 AM" , nbrNewMessages: 0 , isOnline: false),
+    Message_t(id: 18, name: "Rest", message: "Taking a break", time: "10:25 AM" , nbrNewMessages: 0 , isOnline: false),
   ];
 
   @override
@@ -26,6 +38,21 @@ class _MessagesState extends State<Messages> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: MessagesAppBar(),
+      ),
+      bottomNavigationBar: NavigatorbarLine(),
+      floatingActionButton: CircleAvatar(
+        radius: 28,
+        backgroundColor: Colors.teal,
+        child: IconButton(
+        onPressed: (){
+
+        },
+        icon: Icon(
+          LucideIcons.messageCircle,
+          color: Colors.white,
+          size: 32,
+          )
+      ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(8.0),
