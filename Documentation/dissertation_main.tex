@@ -1,0 +1,122 @@
+% !TeX program = lualatex
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% The updated version of this document should be downloaded from
+%%      https://github.com/jp-um/university_of_malta_LaTeX_dissertation_template
+%%
+%% In case of any difficulties please contact Prof. JP Ebejer on jean.p.ebejer@um.edu.mt
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Before you embark on this quest you should probably read some of:
+%% Deadly sins - http://mirrors.ctan.org/info/l2tabu/english/l2tabuen.pdf
+%% Writing a thesis in LaTeX - http://tug.org/pracjourn/2008-1/mori/mori.pdf
+
+\RequirePackage[l2tabu, orthodox]{nag} % tells you of any bad LaTeX usage
+                                       % must be first thing in class (with the exception of comments)
+\RequirePackage{placeins}		       % To use \FloatBarrier
+
+%% There is one option you should define; oneside or twoside.
+%% By default all electronic submissions should be `oneside`
+%% Use twoside for printing (e.g. the supervisor's customary copy)
+%% Note that margins will change accordingly and automatically
+\documentclass[oneside]{um}  % custom University of Malta project/dissertation/thesis 
+
+%% \counterwithout{footnote}{chapter} % use this to have continuous numbering for your footnotes (that do not reset per chapter)
+
+%% **************** (Your) Packages (Start) ******************
+
+% \listfiles % uncomment this to know which packages you are using
+              % the list of packages will be in the bottom of the .log file
+
+%% Note that packges may already be loaded from the um (and memoir) classes.
+%% Do not add your packages to the template, but rather add them here.
+
+\usepackage{blindtext} %% for some dummy text, remove in your writeup
+\usepackage{coffee4}    %% for some fun
+\usepackage{csquotes}
+\usepackage[english]{babel}
+%% ***************** (Your) Packages (End) *******************
+
+
+%% **************** (Your) Data (Start) ******************
+
+\title{Development of a\\Peer-to-Peer\\Messaging System\\Using\\Bluetooth\\on Mobile Devices }  % use \\ here otherwise you get a justified title
+                                     % note capitalization of the title (only common 
+                                     % words in lower case)
+\author{Salah Ahmed Yasser\\Trouzine Mohamed\\Zaiz NourIslem Akram}            % your full name
+\authorID{Q3551396}                   % your University Identifier
+\supervisor{Prof.\ Alaa Eddine Belfedhal}           % your supervisor(s) name
+\cosupervisor{Dr Alaa Eddine Belfedhal}                % your cosupervisor(s) name - no . in Dr *OPTIONAL* 
+                                     % simply comment out the above line if absent
+\department{Department of Computer Science}   % your department (e.g. Artificial Intelligence)
+\faculty{Faculty of Science Exact}       % your faculty (e.g. ICT)
+\degreeName{M.Sc.\ in Licence Degree}       % the degree you are reading
+                                     % note the \ after the dot, so not to consider it a fullstop
+\doctype{dissertation}               % the type of document (fyp, dissertation, thesis)
+\submissionDate{\DTMenglishmonthname{\the\month}, \the\year}     % The actual (corrected, post-viva) submission month, inc. year, should probably be fixed.
+
+%% ***************** (Your) Data (End) *******************
+
+%%
+\renewcommand{\chapterheadstart}{\vspace*{\beforechapskip}}
+\setlength\beforechapskip{0mm}
+
+%% ******** (Your) Document Settings (Start) *************
+
+% You should have an images directory in every chapX subdir
+% NOTE:  Trailing / for subdirs is required.
+\graphicspath{{./images/}{./chap1/images/}{./chap2/images/}}   % Paths where to look for images, if defined "images" must always be there as it holds the images in-use by the template.
+
+\makeindex
+
+\addbibresource{chap1/introduction_biblio.bib}
+\addbibresource{chap2/background_and_lit_overview_biblio.bib}
+\addbibresource{chap3/materials_and_methods_biblio.bib}
+
+
+\begin{document}
+\frontmatter 
+`	\maketitle
+	\input{frontmatter/copyright}       
+	%% The originality statement is *NOT* part of the dissertation but submitted separately.
+	\input{frontmatter/dedication}        % include a dedication.tex file
+	\input{frontmatter/acknowledgements}   % include an acknowledgements.tex file
+	\input{frontmatter/abstract}\if@openright\cleardoublepage\else\clearpage\fi
+	\tableofcontents*\if@openright\cleardoublepage\else\clearpage\fi
+	\listoffigures*\if@openright\cleardoublepage\else\clearpage\fi
+	\listoftables*\if@openright\cleardoublepage\else\clearpage\fi
+	\input{frontmatter/abbreviations}\if@openright\cleardoublepage\else\clearpage\fi
+
+%% Note: always use \input as you cannot nest \includes (amongst other things)
+\pagestyle{umpage}
+\floatpagestyle{umpage}
+
+\mainmatter 
+	%%	\part{Your First Part} %% PhDs may require this parts idea as well.
+	\input{chap1/introduction_main} 
+	\input{chap2/background_and_lit_overview_main}
+	\input{chap3/materials_and_methods_main}
+	\input{chap4/results_and_discussion_main}
+	%%	\part{Your Second Part}
+	\input{chap5/evaluation_main}
+	\input{chap6/conclusion_main}
+
+\appendix
+	\input{appA/appendix_a_main}     % these are just test names as I didn't know what you'd want
+	\input{appB/appendix_b_main}    
+	\input{appC/appendix_c_main}
+		
+\pagestyle{umpageback}
+
+{\backmatter
+	% Bibliography
+	\if@openright\cleardoublepage\else\clearpage\fi
+	% Use something like https://flamingtempura.github.io/bibtex-tidy/ to clean all your bibtex entries
+	\printbibliography[title=References]
+	\printindex
+}
+	
+\end{document}
+
+%%% The End %%%
