@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // for HapticFeedback (Android vibration)
-import 'package:oreon/screens/chat_screen.dart';
+import 'package:oreon/screens/chat_page/chat_screen.dart';
 // Adjust import path to your ChatScreen
 // ignore: depend_on_referenced_packages
 import 'package:web_socket_channel/web_socket_channel.dart';

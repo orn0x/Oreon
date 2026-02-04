@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import '../models/chat_model.dart';
+import '../../models/chat_model.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final Chat chat;

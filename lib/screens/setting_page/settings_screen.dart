@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui'; // For ImageFilter
-import '../main.dart'; // Import to access global 'prefs'
+import '../../main.dart'; // Import to access global 'prefs'
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

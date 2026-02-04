@@ -1,8 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:oreon/screens/chat_screen.dart';
-import 'nearby_contacts_screen.dart';
-import 'settings_screen.dart';
+import 'package:oreon/screens/chat_page/chat_screen.dart';
+import '../nerby_page/nearby_contacts_screen.dart';
+import '../setting_page/settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
