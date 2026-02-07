@@ -1,9 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
-import '../../models/chat_model.dart';
+import 'package:provider/provider.dart';
+import 'package:oreon/models/chat_model.dart';
+import 'package:oreon/services/WIFI_Direct/wdirect_service.dart';
+import 'package:oreon/providers/providers.dart';
+import 'package:oreon/main.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final Chat chat;
@@ -23,21 +25,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
 
-  List<Message> _messages = [];
+  late WiFiDirectController _wifiController;
   bool _isTyping = false;
-  bool _isOnline = false;
-  bool _isConnecting = false;
-
-  // WebSocket for real-time messaging
-  WebSocketChannel? _channel;
-  StreamSubscription? _subscription;
-  Timer? _reconnectTimer;
   Timer? _typingTimer;
-  int _reconnectAttempts = 0;
-  static const int _maxReconnectAttempts = 5;
-
-  // Use localhost for emulator, 10.0.0.2 for physical device connected to same network
-  static const String _wsUrl = 'ws://10.0.0.2:8000/ws/chat';
+  StreamSubscription? _messageStreamSubscription;
+  String? _myDeviceId;
 
   // Animation for typing indicator
   late AnimationController _typingAnimController;
@@ -46,22 +38,36 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   @override
   void initState() {
     super.initState();
-    _loadMessages();
-    _connectWebSocket();
+    _wifiController = WiFiDirectController();
     _setupTypingAnimation();
+    _initializeWiFiDirect();
 
     // Mark messages as read
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() {
-          for (var msg in _messages) {
-            if (!msg.isFromMe && !msg.isRead) {
-              msg.isRead = true;
-            }
-          }
-        });
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _markMessagesAsRead();
     });
+  }
+
+  Future<void> _initializeWiFiDirect() async {
+    try {
+      await _wifiController.initialize();
+      await _wifiController.startMessaging();
+      
+      // Get my device ID
+      _myDeviceId = prefs.getString("name") ?? "Unknown User";
+      
+      debugPrint('✅ WiFi Direct messaging initialized for chat: ${widget.chat.id}');
+    } catch (e) {
+      debugPrint('❌ WiFi Direct initialization failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to initialize WiFi Direct: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -69,9 +75,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _messageController.dispose();
     _scrollController.dispose();
     _messageFocusNode.dispose();
-    _disconnectWebSocket();
+    _messageStreamSubscription?.cancel();
     _typingTimer?.cancel();
     _typingAnimController.dispose();
+    _wifiController.stopMessaging();
     super.dispose();
   }
 
@@ -86,254 +93,98 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     );
   }
 
-  void _loadMessages() {
-    // Load sample messages - replace with actual database/API call
-    setState(() async {
-      _messages = await WebSocketChannel.connect(Uri.parse(_wsUrl)).stream
-          .map((data) => jsonDecode(data) as Map<String, dynamic>)
-          .map((json) => Message(
-                id: json['id'],
-                text: json['text'],
-                timestamp: DateTime.parse(json['timestamp']),
-                isFromMe: json['isFromMe'],
-                isRead: json['isRead'],
-                status: MessageStatus.values[json['status']],
-              ))
-          .toList();
-    });
-
-    // Scroll to bottom
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottom();
-    });
-  }
-
-  void _connectWebSocket() {
-    if (_channel != null) return;
-
-    setState(() => _isConnecting = true);
-
-    try {
-      final uri = Uri.parse(_wsUrl);
-      _channel = WebSocketChannel.connect(uri);
-
-      // Send connection message
-      _channel!.sink.add(jsonEncode({
-        "action": "connect",
-        "userId": "current_user_id", // Replace with actual user ID
-        "chatId": widget.chat.id,
-      }));
-
-      _subscription = _channel!.stream.listen(
-        (dynamic rawMessage) {
-          if (!mounted) return;
-
-          String text;
-          if (rawMessage is String) {
-            text = rawMessage;
-          } else if (rawMessage is List<int>) {
-            text = utf8.decode(rawMessage);
-          } else {
-            return;
-          }
-
-          try {
-            final decoded = jsonDecode(text) as Map<String, dynamic>;
-
-            switch (decoded['type']) {
-              case 'message':
-                _handleIncomingMessage(decoded['data']);
-                break;
-
-              case 'typing':
-                setState(() => _isTyping = decoded['isTyping'] ?? false);
-                break;
-
-              case 'read_receipt':
-                _updateMessageStatus(
-                    decoded['messageId'], MessageStatus.read);
-                break;
-
-              case 'delivered_receipt':
-                _updateMessageStatus(
-                    decoded['messageId'], MessageStatus.delivered);
-                break;
-
-              case 'user_status':
-                setState(() => _isOnline = decoded['online'] ?? false);
-                break;
-            }
-          } catch (e) {
-            debugPrint('WebSocket parse error: $e');
-          }
-        },
-        onError: (error) {
-          debugPrint('WebSocket error: $error');
-          _handleDisconnect();
-        },
-        onDone: () {
-          debugPrint('WebSocket closed');
-          _handleDisconnect();
-        },
-      );
-
-      setState(() {
-        _isConnecting = false;
-        _isOnline = true;
-        _reconnectAttempts = 0;
-      });
-    } catch (e) {
-      debugPrint('WebSocket connection failed: $e');
-      _handleDisconnect();
-    }
-  }
-
-  void _handleIncomingMessage(Map<String, dynamic> data) {
-    final message = Message(
-      id: data['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      text: data['text'] ?? '',
-      timestamp: DateTime.parse(data['timestamp'] ?? DateTime.now().toIso8601String()),
-      isFromMe: false,
-      isRead: false,
-      status: MessageStatus.delivered,
-    );
-
-    setState(() {
-      _messages.add(message);
-    });
-
-    _scrollToBottom();
-    HapticFeedback.lightImpact();
-
-    // Send read receipt
-    _sendReadReceipt(message.id);
-  }
-
-  void _updateMessageStatus(String messageId, MessageStatus status) {
-    setState(() {
-      final index = _messages.indexWhere((m) => m.id == messageId);
-      if (index != -1) {
-        _messages[index].status = status;
-        if (status == MessageStatus.read) {
-          _messages[index].isRead = true;
-        }
-      }
-    });
-  }
-
-  void _handleDisconnect() {
-    _subscription?.cancel();
-    _channel?.sink.close();
-    _channel = null;
-
-    setState(() {
-      _isConnecting = false;
-      _isOnline = false;
-    });
-
-    if (_reconnectAttempts < _maxReconnectAttempts) {
-      _reconnectAttempts++;
-      final delay = Duration(seconds: 2 * _reconnectAttempts);
-
-      _reconnectTimer = Timer(delay, () {
-        if (mounted) {
-          _connectWebSocket();
-        }
-      });
-    }
-  }
-
-  void _disconnectWebSocket() {
-    _reconnectTimer?.cancel();
-    _subscription?.cancel();
-    _channel?.sink.close();
-    _channel = null;
+  void _markMessagesAsRead() {
+    final messageProvider = context.read<MessageProvider>();
+    messageProvider.markChatAsRead(widget.chat.id);
   }
 
   void _sendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final messageProvider = context.read<MessageProvider>();
+    final messageId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    // Add message to provider
+    messageProvider.addMessage(
+      chatId: widget.chat.id,
+      text: text,
+      isFromMe: true,
+      messageId: messageId,
+    );
+
+    _messageController.clear();
+    _scrollToBottom();
+    HapticFeedback.lightImpact();
+
+    debugPrint('📤 Sending message via provider: $text');
+    
+    // Create a Message object to send via WiFi Direct
     final message = Message(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: messageId,
       text: text,
       timestamp: DateTime.now(),
       isFromMe: true,
       isRead: false,
       status: MessageStatus.sending,
     );
+    
+    // Send via WiFi Direct
+    _sendMessageViaWiFiDirect(message);
+  }
 
-    setState(() {
-      _messages.add(message);
-      _messageController.clear();
-    });
+  Future<void> _sendMessageViaWiFiDirect(Message message) async {
+    try {
+      final myName = prefs.getString("name") ?? "Unknown User";
+      
+      final chatMessage = ChatMessage(
+        id: message.id,
+        text: message.text,
+        sender: myName,
+        chatId: widget.chat.id,
+        timestamp: message.timestamp,
+        type: 'message',
+      );
 
-    _scrollToBottom();
-    HapticFeedback.lightImpact();
+      debugPrint('📡 Broadcasting message via WiFi Direct:');
+      debugPrint('   Text: ${chatMessage.text}');
+      debugPrint('   Sender: ${chatMessage.sender}');
+      debugPrint('   ChatId: ${chatMessage.chatId}');
 
-    // Send via WebSocket
-    if (_channel != null) {
-      _channel!.sink.add(jsonEncode({
-        "action": "send_message",
-        "messageId": message.id,
-        "chatId": widget.chat.id,
-        "text": text,
-        "timestamp": message.timestamp.toIso8601String(),
-      }));
+      await _wifiController.sendMessage(chatMessage);
 
-      // Update status to sent after small delay
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          setState(() {
-            message.status = MessageStatus.sent;
-          });
-        }
+      debugPrint('✅ Message broadcast successfully');
+      
+      // Simulate delivery after a delay (for testing)
+      Future.delayed(const Duration(seconds: 2), () {
+        // Status updates can be handled by the provider if needed
       });
-
-      // Simulate delivery after 1 second
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            message.status = MessageStatus.delivered;
-          });
-        }
-      });
+      
+    } catch (e) {
+      debugPrint('❌ Error sending message: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send message: $e'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () => _sendMessageViaWiFiDirect(message),
+            ),
+          ),
+        );
+      }
     }
-
-    _stopTypingIndicator();
   }
 
   void _sendTypingIndicator() {
-    if (_channel != null) {
-      _channel!.sink.add(jsonEncode({
-        "action": "typing",
-        "chatId": widget.chat.id,
-        "isTyping": true,
-      }));
-    }
-
     _typingTimer?.cancel();
     _typingTimer = Timer(const Duration(seconds: 3), _stopTypingIndicator);
   }
 
   void _stopTypingIndicator() {
-    if (_channel != null) {
-      _channel!.sink.add(jsonEncode({
-        "action": "typing",
-        "chatId": widget.chat.id,
-        "isTyping": false,
-      }));
-    }
-  }
-
-  void _sendReadReceipt(String messageId) {
-    if (_channel != null) {
-      _channel!.sink.add(jsonEncode({
-        "action": "read_receipt",
-        "chatId": widget.chat.id,
-        "messageId": messageId,
-      }));
-    }
+    _typingTimer?.cancel();
   }
 
   void _scrollToBottom() {
@@ -409,31 +260,42 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               CircleAvatar(
                 radius: 20,
                 backgroundColor: Colors.teal.withOpacity(0.3),
-                child: Text(
-                  widget.chat.avatarText,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              if (_isOnline)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: Colors.greenAccent,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFF0D0F14),
-                        width: 2,
+                backgroundImage: widget.chat.imageBytes != null
+                    ? MemoryImage(widget.chat.imageBytes!)
+                    : null,
+                child: widget.chat.imageBytes == null
+                    ? Text(
+                      widget.chat.avatarText,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
                       ),
-                    ),
-                  ),
-                ),
+                    )
+                    : null,
+              ),
+              ValueListenableBuilder<bool>(
+                valueListenable: _wifiController.isOnline,
+                builder: (context, isOnline, child) {
+                  return isOnline
+                      ? Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFF0D0F14),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink();
+                },
+              ),
             ],
           ),
           const SizedBox(width: 12),
@@ -450,25 +312,30 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   ),
                 ),
                 const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: _getConnectionColor(),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _isOnline ? _getConnectionLabel() : 'Offline',
-                      style: TextStyle(
-                        color: _getConnectionColor().withOpacity(0.9),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                ValueListenableBuilder<bool>(
+                  valueListenable: _wifiController.isOnline,
+                  builder: (context, isOnline, child) {
+                    return Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: _getConnectionColor(),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          isOnline ? _getConnectionLabel() : 'Offline',
+                          style: TextStyle(
+                            color: _getConnectionColor().withOpacity(0.9),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -476,24 +343,31 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         ],
       ),
       actions: [
-        IconButton(
-          icon: const Icon(Icons.videocam_outlined, color: Colors.white70),
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Video call feature coming soon')),
+        // Add debug info
+        Consumer<MessageProvider>(
+          builder: (context, messageProvider, child) {
+            final messages = messageProvider.getMessagesForChat(widget.chat.id);
+            return Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Text(
+                '${messages.length} msgs',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             );
           },
         ),
         IconButton(
-          icon: const Icon(Icons.call_outlined, color: Colors.white70),
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Voice call feature coming soon')),
-            );
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.more_vert, color: Colors.white70),
+          icon: const Icon(Icons.info_outline, color: Colors.white70),
           onPressed: () => _showOptionsMenu(),
         ),
       ],
@@ -501,20 +375,57 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   Widget _buildMessageList() {
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      itemCount: _messages.length,
-      itemBuilder: (context, index) {
-        final message = _messages[index];
-        final showTimestamp = index == 0 ||
-            message.timestamp.difference(_messages[index - 1].timestamp).inMinutes > 15;
+    return Consumer<MessageProvider>(
+      builder: (context, messageProvider, child) {
+        final messages = messageProvider.getMessagesForChat(widget.chat.id);
+        
+        if (messages.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.chat_bubble_outline,
+                  size: 64,
+                  color: Colors.white.withOpacity(0.2),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No messages yet',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Send a message to start the conversation',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
 
-        return Column(
-          children: [
-            if (showTimestamp) _buildTimestampDivider(message.timestamp),
-            _buildMessageBubble(message),
-          ],
+        return ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          itemCount: messages.length,
+          itemBuilder: (context, index) {
+            final message = messages[index];
+            final showTimestamp = index == 0 ||
+                message.timestamp.difference(messages[index - 1].timestamp).inMinutes > 15;
+
+            return Column(
+              children: [
+                if (showTimestamp) _buildTimestampDivider(message.timestamp),
+                _buildMessageBubble(message),
+              ],
+            );
+          },
         );
       },
     );
@@ -565,6 +476,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             child: GestureDetector(
               onLongPress: () => _showMessageOptions(message),
               child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+                ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: message.isFromMe
@@ -876,7 +790,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 leading: const Icon(Icons.delete, color: Colors.redAccent),
                 title: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
                 onTap: () {
-                  setState(() => _messages.remove(message));
+                  final messageProvider = context.read<MessageProvider>();
+                  messageProvider.deleteMessage(widget.chat.id, message.id);
                   Navigator.pop(context);
                 },
               ),
@@ -887,66 +802,38 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   void _showOptionsMenu() {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1D26),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
-        ),
-        child: Column(
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1D26),
+        title: const Text('Chat Debug Info', style: TextStyle(color: Colors.white)),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              leading: const Icon(Icons.person, color: Colors.white70),
-              title: const Text('View Profile', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.pop(context),
+            Text('Chat ID: ${widget.chat.id}', style: const TextStyle(color: Colors.white70)),
+            Text('Contact: ${widget.chat.contactName}', style: const TextStyle(color: Colors.white70)),
+            Text('My Device: $_myDeviceId', style: const TextStyle(color: Colors.white70)),
+            Consumer<MessageProvider>(
+              builder: (context, messageProvider, child) {
+                final messages = messageProvider.getMessagesForChat(widget.chat.id);
+                return Text('Messages: ${messages.length}', style: const TextStyle(color: Colors.white70));
+              },
             ),
-            ListTile(
-              leading: const Icon(Icons.notifications_off, color: Colors.white70),
-              title: const Text('Mute', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.block, color: Colors.redAccent),
-              title: const Text('Block', style: TextStyle(color: Colors.redAccent)),
-              onTap: () => Navigator.pop(context),
-            ),
+            Text('Connection: ${_getConnectionLabel()}', style: const TextStyle(color: Colors.white70)),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
 }
 
-class Message {
-  final String id;
-  final String text;
-  final DateTime timestamp;
-  final bool isFromMe;
-  bool isRead;
-  MessageStatus status;
-
-  Message({
-    required this.id,
-    required this.text,
-    required this.timestamp,
-    required this.isFromMe,
-    required this.isRead,
-    required this.status,
-  });
-}
-
-enum MessageStatus {
-  sending,
-  sent,
-  delivered,
-  read,
-  failed,
-}
 
 class _StaticBackgroundGlow extends StatelessWidget {
   const _StaticBackgroundGlow();

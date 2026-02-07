@@ -21,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _seedController;
+  late TextEditingController _uuidController;
   
   bool _isLoading = false;
 
@@ -33,6 +34,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _emailController = TextEditingController();
     _phoneController = TextEditingController();
     _seedController = TextEditingController();
+    _uuidController = TextEditingController();
     
     // Load user data
     _loadUserData();
@@ -46,6 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _seedController.dispose();
+    _uuidController.dispose();
     super.dispose();
   }
 
@@ -86,11 +89,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         bio: _bioController.text.trim(),
         email: _emailController.text.trim(),
         phone: _phoneController.text.trim(),
-        // username is not editable in this dialog, preserve existing
         username: userProvider.userUsername,
-        // Preserve existing avatar picture and seed
         avatarPicture: userProvider.avatarPicture?.path,
-        seed: userProvider.userSeed,
+        seed: _seedController.text.trim(),
+        uuid: _uuidController.text.trim(),
       );
       
       // Show success message

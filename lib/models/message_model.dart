@@ -6,6 +6,7 @@ enum ConnectionType {
 }
 
 class Message {
+  final String identifier;
   final String id;
   final String text;
   final DateTime timestamp;
@@ -18,6 +19,7 @@ class Message {
   final MessageType type;
 
   Message({
+    required this.identifier,
     required this.id,
     required this.text,
     required this.timestamp,
@@ -33,6 +35,7 @@ class Message {
   // Convert to JSON
   Map<String, dynamic> toJson() {
     return {
+      'identifier': identifier,
       'id': id,
       'text': text,
       'timestamp': timestamp.toIso8601String(),
@@ -49,6 +52,7 @@ class Message {
   // Create from JSON
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
+      identifier : json['identifier'],
       id: json['id'],
       text: json['text'],
       timestamp: DateTime.parse(json['timestamp']),
@@ -96,6 +100,7 @@ class Message {
 
   // Create a copy with updated fields
   Message copyWith({
+    String? identifier,
     String? id,
     String? text,
     DateTime? timestamp,
@@ -108,6 +113,7 @@ class Message {
     MessageType? type,
   }) {
     return Message(
+      identifier: identifier ?? this.identifier,
       id: id ?? this.id,
       text: text ?? this.text,
       timestamp: timestamp ?? this.timestamp,

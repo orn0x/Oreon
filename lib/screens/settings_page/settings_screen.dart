@@ -106,6 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.delete_outline,
                   onTap: () async {
                     await prefs.clear();
+                    await ChatListProvider().cleanAllChats();
                     Navigator.pushNamedAndRemoveUntil(context, '/signin', (route) => false);
                   },
                 ),

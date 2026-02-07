@@ -1,10 +1,15 @@
 import 'dart:async';
-import 'dart:convert';
-
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:oreon/screens/home_page/home_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:oreon/const/const.dart';
+import 'package:oreon/models/chat_model.dart';
+import 'package:oreon/screens/chat_page/chat_detail_screen.dart';
 import 'package:oreon/screens/chat_page/chat_screen.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:oreon/services/WIFI_Direct/wdirect_service.dart';
+import 'package:oreon/providers/providers.dart';
 
 class StableNearbyContactsScreen extends StatefulWidget {
   const StableNearbyContactsScreen({super.key});
@@ -15,272 +20,182 @@ class StableNearbyContactsScreen extends StatefulWidget {
 
 class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
     with SingleTickerProviderStateMixin {
-  bool _isScanning = false;
-  bool _isConnecting = false;
-  List<Map<String, dynamic>> _nearbyContacts = [];
-  List<Map<String, dynamic>> _filteredContacts = [];
-
+  late WiFiDirectController _wifiController;
   late AnimationController _radarController;
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
-
-  // Use localhost for emulator, 10.0.0.2 for physical device connected to same network
-  static const String _wsUrl = 'ws://10.0.0.2:8000/ws/nearby';
-
-  WebSocketChannel? _channel;
-  StreamSubscription? _subscription;
-  Timer? _reconnectTimer;
-  int _reconnectAttempts = 0;
-  static const int _maxReconnectAttempts = 6;
-  static const Duration _baseReconnectDelay = Duration(seconds: 4);
+  List<DiscoveredDevice> _filteredContacts = [];
+  final Map<String, double> _deviceDistances = {};
+  final Random _random = Random();
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
+    _wifiController = WiFiDirectController();
+    _initializeController();
+    
     _radarController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
     );
     _searchController.addListener(_onSearchChanged);
+    
+    // Listen to device changes with proper error handling
+    _wifiController.nearbyDevices.addListener(_onDevicesChanged);
+  }
+
+  Future<void> _initializeController() async {
+    try {
+      await _wifiController.initialize();
+      if (mounted && !_isDisposed) {
+        _filterContacts();
+      }
+    } catch (e) {
+      if (mounted && !_isDisposed) {
+        _showSnackBar('Failed to initialize WiFi Direct: ${e.toString()}', isError: true);
+      }
+    }
+  }
+
+  void _onDevicesChanged() {
+    if (!_isDisposed && mounted) {
+      _filterContacts();
+    }
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _debounce?.cancel();
-    _stopScanning();
+    
+    // Safely remove listeners
+    try {
+      _wifiController.nearbyDevices.removeListener(_onDevicesChanged);
+    } catch (e) {
+      // Listener might already be removed
+    }
+    
+    _wifiController.dispose();
     _radarController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   void _onSearchChanged() {
+    if (_isDisposed) return;
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), _filterContacts);
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (!_isDisposed) {
+        _filterContacts();
+      }
+    });
   }
 
   void _startScanning() {
-    if (_isScanning) return;
-
-    setState(() {
-      _isScanning = true;
-      _nearbyContacts.clear();
-      _filteredContacts.clear();
-      _reconnectAttempts = 0;
-    });
-
-    _radarController.repeat();
-    _connectWebSocket();
-  }
-
-  void _connectWebSocket() {
-    if (_channel != null) return;
-
-    setState(() => _isConnecting = true);
-
+    if (_isDisposed) return;
     try {
-      final uri = Uri.parse(_wsUrl);
-      _channel = WebSocketChannel.connect(uri);
-
-      _channel!.sink.add(jsonEncode({
-        "action": "start_scan",
-        "userId": "android_user_${DateTime.now().millisecondsSinceEpoch}",
-        "durationSeconds": 45,
-      }));
-
-      _subscription = _channel!.stream.listen(
-        (dynamic rawMessage) {
-          if (!mounted) return;
-
-          String text;
-          if (rawMessage is String) {
-            text = rawMessage;
-          } else if (rawMessage is List<int>) {
-            text = utf8.decode(rawMessage);
-          } else {
-            debugPrint("Unsupported message type: ${rawMessage.runtimeType}");
-            return;
-          }
-
-          try {
-            final decoded = jsonDecode(text) as Map<String, dynamic>;
-
-            switch (decoded['type']) {
-              case 'user_found':
-                final user = decoded['data'] as Map<String, dynamic>?;
-                if (user == null) return;
-
-                final distance = (user['distanceMeters'] as num?)?.toDouble() ?? 9999.0;
-
-                setState(() {
-                  if (!_nearbyContacts.any((c) => c['id'] == user['id'])) {
-                    _nearbyContacts.add({
-                      'id': user['id'],
-                      'name': user['name'] ?? 'Unknown',
-                      'dist': _formatDistance(distance),
-                      'rawDistance': distance,
-                      'type': user['connectionType'] ?? 'WiFi',
-                      'strength': _getStrengthFromDistance(distance),
-                      'avatarUrl': user['avatarUrl'],
-                      'timestamp': DateTime.now(),
-                    });
-                    _sortContacts();
-                    _filteredContacts = List.from(_nearbyContacts);
-                  }
-                });
-
-                if (distance < 20) {
-                  HapticFeedback.lightImpact();
-                }
-                break;
-
-              case 'scan_complete':
-                _stopScanning(auto: true);
-                break;
-
-              case 'error':
-                final msg = decoded['message'] as String? ?? 'Scan error';
-                if (mounted) {
-                  _showSnackBar(msg, isError: true);
-                }
-                _stopScanning();
-                break;
-            }
-          } catch (e, st) {
-            debugPrint("Parse error: $e\n$st");
-          }
-        },
-        onError: (error) {
-          debugPrint("WebSocket error: $error");
-          _handleDisconnect();
-        },
-        onDone: () {
-          debugPrint("WebSocket closed");
-          _handleDisconnect();
-        },
-      );
-
-      setState(() => _isConnecting = false);
+      _radarController.repeat();
+      _wifiController.startDiscovery();
     } catch (e) {
-      debugPrint("Connect failed: $e");
-      _handleDisconnect();
-    }
-  }
-
-  void _handleDisconnect() {
-    _subscription?.cancel();
-    _channel?.sink.close();
-    _channel = null;
-    setState(() => _isConnecting = false);
-
-    if (_isScanning && _reconnectAttempts < _maxReconnectAttempts) {
-      _reconnectAttempts++;
-      final multiplier = (1 << (_reconnectAttempts - 1)).clamp(1, 8);
-      final delay = _baseReconnectDelay * multiplier;
-
-      debugPrint("Reconnect attempt #$_reconnectAttempts in ${delay.inSeconds}s");
-
-      _reconnectTimer = Timer(delay, () {
-        if (mounted && _isScanning) {
-          _connectWebSocket();
-        }
-      });
-    } else if (_isScanning) {
-      _stopScanning();
-      if (mounted) {
-        _showSnackBar('Connection lost. Tap radar to retry.', isError: true);
-      }
+      _showSnackBar('Failed to start scanning: ${e.toString()}', isError: true);
     }
   }
 
   void _stopScanning({bool auto = false}) {
-    if (!_isScanning) return;
+    if (_isDisposed) return;
+    try {
+      _radarController.stop();
+      _radarController.reset();
+      _wifiController.stopDiscovery();
 
-    _subscription?.cancel();
-    _channel?.sink.add(jsonEncode({"action": "stop_scan"}));
-    _channel?.sink.close();
-    _channel = null;
-    _reconnectTimer?.cancel();
+      if (auto && mounted && !_isDisposed && _wifiController.nearbyDevices.value.isNotEmpty) {
+        _showSnackBar('Scan finished • Found ${_wifiController.nearbyDevices.value.length} devices');
+      }
+    } catch (e) {
+      _showSnackBar('Failed to stop scanning: ${e.toString()}', isError: true);
+    }
+  }
 
-    _radarController.stop();
-    _radarController.reset();
-
-    if (mounted) {
-      setState(() {
-        _isScanning = false;
-        _isConnecting = false;
-      });
-
-      if (auto) {
-        _showSnackBar('Scan finished • Found ${_nearbyContacts.length} contacts');
+  void _filterContacts() {
+    if (_isDisposed || !mounted) return;
+    
+    try {
+      final query = _searchController.text.trim().toLowerCase();
+      final allDevices = _wifiController.nearbyDevices.value;
+      
+      // Generate stable distances for each device
+      for (final device in allDevices) {
+        _deviceDistances.putIfAbsent(device.id, () => _random.nextDouble() * 100);
+      }
+      
+      if (mounted && !_isDisposed) {
+        setState(() {
+          if (query.isEmpty) {
+            _filteredContacts = List.from(allDevices);
+          } else {
+            _filteredContacts = allDevices
+                .where((device) => device.name.toLowerCase().contains(query))
+                .toList();
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted && !_isDisposed) {
+        _showSnackBar('Error filtering contacts: ${e.toString()}', isError: true);
       }
     }
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
-    if (!mounted) return;
+    if (!mounted || _isDisposed) return;
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : Icons.check_circle_outline,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(fontSize: 15),
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                isError ? Icons.error_outline : Icons.check_circle_outline,
+                color: Colors.white,
+                size: 20,
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(fontSize: 15),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: isError 
+              ? Colors.red.withOpacity(0.9)
+              : Colors.teal.withOpacity(0.9),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
         ),
-        backgroundColor: isError 
-            ? Colors.red.withOpacity(0.9) 
-            : Colors.teal.withOpacity(0.9),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+    } catch (e) {
+      // Ignore snackbar errors if widget is disposed
+    }
   }
 
   void _toggleScanning() {
-    HapticFeedback.mediumImpact();
-    _isScanning ? _stopScanning() : _startScanning();
+    if (_isDisposed) return;
+    try {
+      HapticFeedback.mediumImpact();
+      _wifiController.isScanning.value ? _stopScanning() : _startScanning();
+    } catch (e) {
+      _showSnackBar('Failed to toggle scanning: ${e.toString()}', isError: true);
+    }
   }
 
   String _formatDistance(double meters) {
     if (meters < 1000) return '${meters.toStringAsFixed(0)} m';
     return '${(meters / 1000).toStringAsFixed(1)} km';
-  }
-
-  String _getStrengthFromDistance(double distance) {
-    if (distance < 15) return 'strong';
-    if (distance < 40) return 'medium';
-    return 'weak';
-  }
-
-  void _sortContacts() {
-    _nearbyContacts.sort((a, b) {
-      final da = a['rawDistance'] as double? ?? 9999.0;
-      final db = b['rawDistance'] as double? ?? 9999.0;
-      return da.compareTo(db);
-    });
-  }
-
-  void _filterContacts() {
-    final query = _searchController.text.trim().toLowerCase();
-    setState(() {
-      _filteredContacts = query.isEmpty
-          ? List.from(_nearbyContacts)
-          : _nearbyContacts
-              .where((c) => (c['name'] as String).toLowerCase().contains(query))
-              .toList();
-    });
   }
 
   IconData _getSignalIcon(String strength) {
@@ -325,40 +240,75 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
           ),
         ),
         actions: [
-          if (_isConnecting)
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  valueColor: AlwaysStoppedAnimation(Colors.tealAccent.withOpacity(0.8)),
-                ),
-              ),
-            ),
-          IconButton(
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (child, animation) {
-                return ScaleTransition(scale: animation, child: child);
-              },
-              child: Icon(
-                _isScanning ? Icons.stop_circle_rounded : Icons.radar_rounded,
-                key: ValueKey(_isScanning),
-                color: _isScanning ? Colors.redAccent : Colors.tealAccent,
-                size: 32,
-              ),
-            ),
-            onPressed: _toggleScanning,
-            tooltip: _isScanning ? 'Stop Scanning' : 'Start Scanning',
+          ValueListenableBuilder<bool>(
+            valueListenable: _wifiController.isScanning,
+            builder: (context, isScanning, child) {
+              return Row(
+                children: [
+                  if (isScanning)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          valueColor: AlwaysStoppedAnimation(Colors.tealAccent.withOpacity(0.8)),
+                        ),
+                      ),
+                    ),
+                  // Add test devices button for debugging
+                  IconButton(
+                    icon: Icon(
+                      Icons.add_circle_outline,
+                      color: Colors.orange.withOpacity(0.8),
+                      size: 28,
+                    ),
+                    onPressed: () {
+                      _wifiController.addTestDevices();
+                      _showSnackBar('Added test devices for debugging', isError: false);
+                    },
+                    tooltip: 'Add Test Devices',
+                  ),
+                  // Debug mode toggle button
+                  IconButton(
+                    icon: Icon(
+                      Icons.bug_report,
+                      color: Colors.purple.withOpacity(0.8),
+                      size: 26,
+                    ),
+                    onPressed: () {
+                      _wifiController.toggleDebugMode();
+                      _showSnackBar('Debug mode toggled - shows own device', isError: false);
+                    },
+                    tooltip: 'Toggle Debug Mode (Show Self)',
+                  ),
+                  IconButton(
+                    icon: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (child, animation) {
+                        return ScaleTransition(scale: animation, child: child);
+                      },
+                      child: Icon(
+                        isScanning ? Icons.stop_circle_rounded : Icons.radar_rounded,
+                        key: ValueKey(isScanning),
+                        color: isScanning ? Colors.redAccent : Colors.tealAccent,
+                        size: 32,
+                      ),
+                    ),
+                    onPressed: _toggleScanning,
+                    tooltip: isScanning ? 'Stop Scanning' : 'Start Scanning',
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              );
+            },
           ),
-          const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          if (_isScanning) {
+          if (_wifiController.isScanning.value) {
             _stopScanning();
             await Future.delayed(const Duration(milliseconds: 500));
           }
@@ -374,11 +324,21 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
               child: Column(
                 children: [
                   const SizedBox(height: 8),
-                  _buildStatusCard(),
-                  if (_nearbyContacts.isNotEmpty) _buildSearchBar(),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _wifiController.isScanning,
+                    builder: (context, isScanning, _) {
+                      return _buildStatusCard(isScanning);
+                    },
+                  ),
+                  if (_filteredContacts.isNotEmpty) _buildSearchBar(),
                   Expanded(
                     child: _filteredContacts.isEmpty 
-                        ? _buildEmptyState() 
+                        ? ValueListenableBuilder<bool>(
+                            valueListenable: _wifiController.isScanning,
+                            builder: (context, isScanning, _) {
+                              return _buildEmptyState(isScanning);
+                            },
+                          )
                         : _buildContactList(),
                   ),
                 ],
@@ -390,18 +350,18 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
     );
   }
 
-  Widget _buildStatusCard() {
+  Widget _buildStatusCard(bool isScanning) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(_isScanning ? 0.08 : 0.04),
+        color: Colors.white.withOpacity(isScanning ? 0.08 : 0.04),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withOpacity(_isScanning ? 0.15 : 0.08),
+          color: Colors.white.withOpacity(isScanning ? 0.15 : 0.08),
           width: 1.5,
         ),
-        boxShadow: _isScanning
+        boxShadow: isScanning
             ? [
                 BoxShadow(
                   color: Colors.tealAccent.withOpacity(0.15),
@@ -421,16 +381,16 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
               children: [
                 CustomPaint(
                   size: const Size(80, 80),
-                  painter: RadarPainter(_radarController, _isScanning),
+                  painter: RadarPainter(_radarController, isScanning),
                 ),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   width: 14,
                   height: 14,
                   decoration: BoxDecoration(
-                    color: _isScanning ? Colors.tealAccent : Colors.grey[600],
+                    color: isScanning ? Colors.tealAccent : Colors.grey[600],
                     shape: BoxShape.circle,
-                    boxShadow: _isScanning
+                    boxShadow: isScanning
                         ? [
                             BoxShadow(
                               color: Colors.tealAccent.withOpacity(0.6),
@@ -452,12 +412,10 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   child: Text(
-                    _isScanning
+                    isScanning
                         ? "Scanning..."
-                        : _isConnecting
-                            ? "Connecting..."
-                            : "Ready",
-                    key: ValueKey(_isScanning),
+                        : "Ready",
+                    key: ValueKey(isScanning),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
@@ -466,20 +424,23 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
                   ),
                 ),
                 const SizedBox(height: 6),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: Text(
-                    _isScanning
-                        ? "${_nearbyContacts.length} contacts found"
-                        : _isConnecting
-                            ? "Establishing connection..."
-                            : "Tap radar to discover",
-                    key: ValueKey('$_isScanning-${_nearbyContacts.length}'),
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.65),
-                      fontSize: 15,
-                    ),
-                  ),
+                ValueListenableBuilder<List<DiscoveredDevice>>(
+                  valueListenable: _wifiController.nearbyDevices,
+                  builder: (context, devices, _) {
+                    return AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: Text(
+                        isScanning
+                            ? "${devices.length} devices found"
+                            : "WiFi Direct Ready",
+                        key: ValueKey('$isScanning-${devices.length}'),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.65),
+                          fontSize: 15,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -534,10 +495,10 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
       physics: const BouncingScrollPhysics(),
       itemCount: _filteredContacts.length,
       itemBuilder: (context, index) {
-        final contact = _filteredContacts[index];
-        final avatarUrl = contact['avatarUrl'] as String?;
-        final timeAgo = _getTimeAgo(contact['timestamp'] as DateTime);
-        final strength = contact['strength'] as String;
+        final device = _filteredContacts[index];
+        final distance = _deviceDistances[device.id] ?? 0.0;
+        final strength = distance < 15 ? 'strong' : distance < 40 ? 'medium' : 'weak';
+        final timeAgo = _getTimeAgo(device.timestamp);
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -548,15 +509,33 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
             child: InkWell(
               onTap: () {
                 HapticFeedback.lightImpact();
-                Navigator.push(
+                
+                // Add discovered device to chat list via provider
+                final chatProvider = context.read<ChatListProvider>();
+                final chat = Chat(
+                  identifier: ConstApp().appIdentifier(),
+                  id: device.id,
+                  contactName: device.name.isEmpty ? 'Unknown Device' : device.name,
+                  lastMessage: 'Start chatting via WiFi Direct',
+                  timestamp: DateTime.now(),
+                  unreadCount: 0,
+                  connectionType: ConnectionType.wifi,
+                  avatarText: device.name.isNotEmpty ? device.name[0].toUpperCase() : 'U',
+                  avatarImageBytes: device.imageBytes,
+                  deviceId: device.id,
+                );
+                
+                chatProvider.addOrUpdateChat(chat);
+                
+                // Navigate to chat screen to see the new contact
+                Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ChatsScreen(
-                      userId: contact['id'] as String,
-                      avatarUrl: avatarUrl,
-                    ),
+                    builder: (context) => const HomeScreen(),
                   ),
                 );
+                
+                _showSnackBar('Added ${chat.contactName} to chats!', isError: false);
               },
               splashColor: Colors.tealAccent.withOpacity(0.1),
               highlightColor: Colors.tealAccent.withOpacity(0.05),
@@ -573,18 +552,22 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
                       CircleAvatar(
                         radius: 30,
                         backgroundColor: Colors.teal.withOpacity(0.3),
-                        backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
-                            ? NetworkImage(avatarUrl)
+                        backgroundImage: device.imageBytes != null
+                            ? MemoryImage(device.imageBytes!)
                             : null,
-                        child: avatarUrl == null || avatarUrl.isEmpty
-                            ? Text(
-                                (contact['name'] as String)[0].toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
+                        child: device.imageBytes == null
+                            ? (device.name.isEmpty ? const Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 30,
+                              ) : Text(
+                          device.name[0].toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ))
                             : null,
                       ),
                       Positioned(
@@ -610,7 +593,7 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
                     ],
                   ),
                   title: Text(
-                    contact['name'] as String,
+                    device.name.isEmpty ? 'Unknown Device' : device.name,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 17,
@@ -628,7 +611,7 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          "${contact['dist']} • ${contact['type']}",
+                          "${_formatDistance(distance)} • WiFi Direct",
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.6),
                             fontSize: 14,
@@ -659,7 +642,7 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isScanning) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -669,14 +652,12 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 400),
               child: Icon(
-                _isScanning
+                isScanning
                     ? Icons.radar_rounded
-                    : _isConnecting
-                        ? Icons.sync_rounded
-                        : _searchController.text.trim().isEmpty
-                            ? Icons.people_outline_rounded
-                            : Icons.search_off_rounded,
-                key: ValueKey('$_isScanning-$_isConnecting-${_searchController.text}'),
+                    : _searchController.text.trim().isEmpty
+                        ? Icons.people_outline_rounded
+                        : Icons.search_off_rounded,
+                key: ValueKey('$isScanning-${_searchController.text}'),
                 size: 100,
                 color: Colors.white.withOpacity(0.15),
               ),
@@ -685,14 +666,12 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
               child: Text(
-                _isScanning
+                isScanning
                     ? "Searching nearby..."
-                    : _isConnecting
-                        ? "Connecting..."
-                        : _searchController.text.trim().isEmpty
-                            ? "No contacts yet"
-                            : "No matches found",
-                key: ValueKey('$_isScanning-$_isConnecting-${_searchController.text}'),
+                    : _searchController.text.trim().isEmpty
+                        ? "No contacts yet"
+                        : "No matches found",
+                key: ValueKey('$isScanning-${_searchController.text}'),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 22,
@@ -705,14 +684,12 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
               child: Text(
-                _isScanning
+                isScanning
                     ? "Stay in the area for best results"
-                    : _isConnecting
-                        ? "Please wait while we connect..."
-                        : _searchController.text.trim().isEmpty
-                            ? "Pull to refresh or tap the radar\nto start discovering"
-                            : "Try searching for a different name",
-                key: ValueKey('desc-$_isScanning-$_isConnecting-${_searchController.text}'),
+                    : _searchController.text.trim().isEmpty
+                        ? "Try searching for a different name"
+                        : "No nearby devices match your search",
+                key: ValueKey('desc-$isScanning-${_searchController.text}'),
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.55),
                   fontSize: 15,

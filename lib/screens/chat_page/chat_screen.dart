@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
-
-import '../../models/chat_model.dart';
+import 'dart:typed_data';
+import 'package:provider/provider.dart';
+import 'package:oreon/const/const.dart';
+import 'package:oreon/models/chat_model.dart';
+import 'package:oreon/providers/providers.dart';
 import 'chat_detail_screen.dart';
 
+
 class ChatsScreen extends StatefulWidget {
-  // Fixed: Made parameters optional with default values
+  // Optional params when coming from discovery flow
   final String? userId;
   final String? avatarUrl;
-  
+  final String? contactName;
+  final String? deviceId;
+  final Uint8List? contactImageBytes;
+
   const ChatsScreen({
-    super.key, 
-    this.userId, 
+    super.key,
+    this.userId,
     this.avatarUrl,
+    this.contactName,
+    this.deviceId,
+    this.contactImageBytes,
   });
 
   @override
@@ -20,11 +30,7 @@ class ChatsScreen extends StatefulWidget {
 
 class _ChatsScreenState extends State<ChatsScreen>
     with SingleTickerProviderStateMixin {
-  bool _isScanning = true;
   late AnimationController _radarController;
-
-  // Sample chats with connection type and "distance" feel
-  final List<Chat> _chats = [];
 
   @override
   void initState() {
@@ -33,11 +39,11 @@ class _ChatsScreenState extends State<ChatsScreen>
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat();
-    
-    // If userId is provided, navigate to chat detail automatically
-    if (widget.userId != null) {
+
+    // Add discovered contact if passed via constructor (e.g. from discovery callback)
+    if (widget.deviceId != null && widget.contactName != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _navigateToChatDetail(widget.userId!, widget.avatarUrl);
+        _addDiscoveredContact();
       });
     }
   }
@@ -48,90 +54,93 @@ class _ChatsScreenState extends State<ChatsScreen>
     super.dispose();
   }
 
-  void _navigateToChatDetail(String userId, String? avatarUrl) {
-    // Find existing chat or create new one
-    final existingChat = _chats.firstWhere(
-      (chat) => chat.id == userId,
-      orElse: () => Chat(
-        id: userId,
-        contactName: 'New Contact',
-        lastMessage: 'Start chatting',
-        timestamp: DateTime.now(),
-        unreadCount: 0,
-        connectionType: ConnectionType.wifi,
-        avatarText: 'N',
-      ),
+  void _addDiscoveredContact() {
+    final chatProvider = context.read<ChatListProvider>();
+
+    final newChat = Chat(
+      identifier: ConstApp().appIdentifier(),
+      id: widget.deviceId!,
+      contactName: widget.contactName!,
+      lastMessage: "",
+      timestamp: DateTime.now(),
+      unreadCount: 0,
+      connectionType: ConnectionType.wifi,
+      avatarText: widget.contactName![0].toUpperCase(),
+      deviceId: widget.deviceId,
+      avatarImageBytes: widget.contactImageBytes,
     );
 
-    Navigator.pushReplacement(
+    chatProvider.addOrUpdateChat(newChat);
+  }
+
+  void _navigateToChat(Chat chat) {
+    Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ChatDetailScreen(chat: existingChat),
+        builder: (_) => ChatDetailScreen(chat: chat),
       ),
     );
   }
 
-  void _toggleScanning() {
-    setState(() {
-      _isScanning = !_isScanning;
-      if (_isScanning) {
-        _radarController.repeat();
-      } else {
-        _radarController.stop();
-      }
-    });
-  }
+  String _formatTimeAgo(DateTime time) {
+    final now = DateTime.now();
+    final diff = now.difference(time);
 
-  String _getConnectionLabel(ConnectionType type) {
-    switch (type) {
-      case ConnectionType.bluetooth:
-        return 'Nearby • Bluetooth';
-      case ConnectionType.wifi:
-        return 'Local • WiFi Direct';
-      case ConnectionType.centralized:
-        return 'Online • Server';
-      default:
-        return 'Online';
-    }
+    if (diff.inSeconds < 45) return 'just now';
+    if (diff.inMinutes < 1) return '${diff.inSeconds}s ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${time.day}/${time.month}/${time.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0F14),
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          'Chats',
-          style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: Stack(
-        children: [
-          const RepaintBoundary(child: _StaticBackgroundGlow()),
+    return Consumer2<ChatListProvider, WiFiDirectProvider>(
+      builder: (context, chatProvider, wifiProvider, _) {
+        final isScanning = wifiProvider.isScanning; // ← real state from provider
 
-          SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: _chats.isEmpty ? _buildEmptyState() : _buildChatList(),
-                ),
-              ],
+        return Scaffold(
+          backgroundColor: const Color(0xFF0D0F14),
+          extendBodyBehindAppBar: true,
+          appBar: AppBar(
+            title: Text(
+              'Chats',
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
             ),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
           ),
-        ],
-      ),
+          body: Stack(
+            children: [
+              const _StaticBackgroundGlow(),
+              SafeArea(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: chatProvider.chats.isEmpty
+                          ? _buildEmptyState(isScanning)
+                          : _buildChatList(chatProvider.chats),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildChatList() {
+  Widget _buildChatList(List<Chat> chats) {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _chats.length,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: chats.length,
       itemBuilder: (context, index) {
-        final chat = _chats[index];
+        final chat = chats[index];
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -142,15 +151,21 @@ class _ChatsScreenState extends State<ChatsScreen>
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             leading: CircleAvatar(
-              radius: 24,
-              backgroundColor: Colors.teal.withOpacity(0.2),
-              child: Text(
-                chat.avatarText,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              radius: 28,
+              backgroundColor: Colors.teal.withOpacity(0.25),
+              foregroundImage: chat.avatarImageBytes != null
+                  ? MemoryImage(chat.avatarImageBytes!)
+                  : null,
+              child: chat.avatarImageBytes == null
+                  ? Text(
+                      chat.avatarText,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    )
+                  : null,
             ),
             title: Text(
               chat.contactName,
@@ -163,7 +178,7 @@ class _ChatsScreenState extends State<ChatsScreen>
             subtitle: Text(
               _getConnectionLabel(chat.connectionType),
               style: TextStyle(
-                color: Colors.tealAccent.withOpacity(0.8),
+                color: Colors.tealAccent.withOpacity(0.85),
                 fontSize: 13,
               ),
             ),
@@ -173,7 +188,7 @@ class _ChatsScreenState extends State<ChatsScreen>
               children: [
                 if (chat.unreadCount > 0)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: Colors.tealAccent,
                       borderRadius: BorderRadius.circular(12),
@@ -181,7 +196,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                     child: Text(
                       '${chat.unreadCount}',
                       style: const TextStyle(
-                        color: Colors.black,
+                        color: Colors.black87,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
@@ -189,61 +204,62 @@ class _ChatsScreenState extends State<ChatsScreen>
                   ),
                 const SizedBox(height: 4),
                 Text(
-                  _formatTimestamp(chat.timestamp),
+                  _formatTimeAgo(chat.timestamp),
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
+                    color: Colors.white.withOpacity(0.45),
                     fontSize: 12,
                   ),
                 ),
               ],
             ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ChatDetailScreen(chat: chat),
-                ),
-              );
-            },
+            onTap: () => _navigateToChat(chat),
           ),
         );
       },
     );
   }
 
-  String _formatTimestamp(DateTime time) {
-    final now = DateTime.now();
-    final diff = now.difference(time);
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
+  String _getConnectionLabel(ConnectionType type) {
+    return switch (type) {
+      ConnectionType.bluetooth => 'Nearby • Bluetooth',
+      ConnectionType.wifi => 'Local • WiFi',
+      ConnectionType.centralized => 'Online',
+      _ => 'Unknown',
+    };
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isScanning) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.sensors_off,
-            size: 80,
-            color: Colors.white.withOpacity(0.1),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            "No active chats",
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.4),
-              fontSize: 18,
+          AnimatedOpacity(
+            opacity: isScanning ? 1.0 : 0.4,
+            duration: const Duration(milliseconds: 600),
+            child: Icon(
+              isScanning ? Icons.radar : Icons.sensors_off,
+              size: 90,
+              color: isScanning ? Colors.tealAccent.withOpacity(0.4) : Colors.white.withOpacity(0.12),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 32),
           Text(
-            "Start scanning to discover nearby contacts",
+            isScanning ? "Scanning nearby devices..." : "No active chats",
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isScanning
+                ? "Looking for people nearby on the same WiFi"
+                : "Start scanning to discover nearby contacts",
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.3),
-              fontSize: 14,
+              color: Colors.white.withOpacity(0.35),
+              fontSize: 15,
             ),
           ),
         ],
@@ -258,18 +274,19 @@ class _StaticBackgroundGlow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      top: -150,
-      left: -150,
+      top: -180,
+      left: -180,
       child: Container(
-        width: 500,
-        height: 500,
+        width: 600,
+        height: 600,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: RadialGradient(
             colors: [
-              Colors.teal.withOpacity(0.1),
+              Colors.teal.withOpacity(0.12),
               Colors.transparent,
             ],
+            stops: const [0.0, 0.7],
           ),
         ),
       ),

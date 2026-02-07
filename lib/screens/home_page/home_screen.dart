@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:oreon/providers/providers.dart';
 import 'package:oreon/screens/chat_page/chat_screen.dart';
 import '../nerby_page/nearby_contacts_screen.dart';
 import '../settings_page/settings_screen.dart';
@@ -80,34 +82,96 @@ class _CompactGlassmorphicBottomNav extends StatelessWidget {
               ),
             ),
           ),
-          child: BottomNavigationBar(
-            currentIndex: currentIndex,
-            onTap: onTabChanged,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            type: BottomNavigationBarType.fixed,
-            showSelectedLabels: false,
-            showUnselectedLabels: false,
-            selectedItemColor: Colors.tealAccent,
-            unselectedItemColor: const Color(0x99FFFFFF), // Pre-computed opacity
-            iconSize: 28,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.chat_bubble_outline),
-                activeIcon: Icon(Icons.chat_bubble),
-                label: '',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.radar_outlined),
-                activeIcon: Icon(Icons.radar),
-                label: '',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.settings_outlined),
-                activeIcon: Icon(Icons.settings),
-                label: '',
-              ),
-            ],
+          child: Consumer<ChatListProvider>(
+            builder: (context, chatProvider, child) {
+              return BottomNavigationBar(
+                currentIndex: currentIndex,
+                onTap: onTabChanged,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                type: BottomNavigationBarType.fixed,
+                showSelectedLabels: false,
+                showUnselectedLabels: false,
+                selectedItemColor: Colors.tealAccent,
+                unselectedItemColor: const Color(0x99FFFFFF),
+                iconSize: 28,
+                items: [
+                  BottomNavigationBarItem(
+                    icon: Stack(
+                      children: [
+                        const Icon(Icons.chat_bubble_outline),
+                        if (chatProvider.unreadCount > 0)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 16,
+                                minHeight: 16,
+                              ),
+                              child: Text(
+                                '${chatProvider.unreadCount > 99 ? "99+" : chatProvider.unreadCount}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    activeIcon: Stack(
+                      children: [
+                        const Icon(Icons.chat_bubble),
+                        if (chatProvider.unreadCount > 0)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 16,
+                                minHeight: 16,
+                              ),
+                              child: Text(
+                                '${chatProvider.unreadCount > 99 ? "99+" : chatProvider.unreadCount}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    label: '',
+                  ),
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.radar_outlined),
+                    activeIcon: Icon(Icons.radar),
+                    label: '',
+                  ),
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.settings_outlined),
+                    activeIcon: Icon(Icons.settings),
+                    label: '',
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),

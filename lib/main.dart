@@ -33,6 +33,9 @@ class OreonApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => ChatListProvider()..initializeChats()),
+        ChangeNotifierProvider(create: (_) => MessageProvider()..initialize()),
+        ChangeNotifierProvider(create: (_) => WiFiDirectProvider()..initialize()),
       ],
       child:
     MaterialApp(

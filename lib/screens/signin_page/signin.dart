@@ -5,7 +5,8 @@ import 'package:oreon/main.dart';
 import 'package:oreon/providers/providers.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert'; // for utf8.encode
-import 'package:crypto/crypto.dart'; // for hashing algorithms
+import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart'; // for hashing algorithms
 
 
 class SignInScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class _SignInScreenState extends State<SignInScreen> {
   late TextEditingController _usernameController;
   late TextEditingController _phoneController;
   late TextEditingController _userSeed;
+  late TextEditingController _userUUID;
   
   bool _isSignUp = false;
   bool _obscurePassword = true;
@@ -36,6 +38,7 @@ class _SignInScreenState extends State<SignInScreen> {
     _usernameController = TextEditingController();
     _phoneController = TextEditingController();
     _userSeed = TextEditingController();
+    _userUUID = TextEditingController();
   }
 
   @override
@@ -46,11 +49,12 @@ class _SignInScreenState extends State<SignInScreen> {
     _usernameController.dispose();
     _phoneController.dispose();
     _userSeed.dispose();
+    _userUUID.dispose();
     super.dispose();
   }
 
   String generateSha256Hash(String input) {
-    return sha256.convert(utf8.encode(input)).toString();
+    return sha256.convert(utf8.encode(input.trim())).toString();
 }
 
 
@@ -89,6 +93,7 @@ class _SignInScreenState extends State<SignInScreen> {
           email: _emailController.text,
           phone: _phoneController.text,
           seed: generateSha256Hash(_usernameController.text),
+          uuid: Uuid().v4().toString(),
         );
 
         if (mounted && context.mounted) {

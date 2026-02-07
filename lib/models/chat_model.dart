@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 enum ConnectionType {
   wifi,
   bluetooth,
@@ -6,6 +8,7 @@ enum ConnectionType {
 }
 
 class Chat {
+  final String identifier;
   final String id;
   final String contactName;
   final String lastMessage;
@@ -14,8 +17,12 @@ class Chat {
   final ConnectionType connectionType;
   final String avatarText;
   final String? avatarUrl;
+  final Uint8List? imageBytes;
+  final String? deviceId;
+  final Uint8List? avatarImageBytes;
 
   Chat({
+    required this.identifier,
     required this.id,
     required this.contactName,
     required this.lastMessage,
@@ -24,11 +31,15 @@ class Chat {
     required this.connectionType,
     required this.avatarText,
     this.avatarUrl,
+    this.imageBytes,
+    this.deviceId,
+    this.avatarImageBytes,
   });
 
   // Convert to JSON for storage/transmission
   Map<String, dynamic> toJson() {
     return {
+      'identifier': identifier,
       'id': id,
       'contactName': contactName,
       'lastMessage': lastMessage,
@@ -43,6 +54,7 @@ class Chat {
   // Create from JSON
   factory Chat.fromJson(Map<String, dynamic> json) {
     return Chat(
+      identifier : json['identifier'],
       id: json['id'],
       contactName: json['contactName'],
       lastMessage: json['lastMessage'],
@@ -70,6 +82,7 @@ class Chat {
   }
 
   Chat copyWith({
+    String? identifier,
     String? id,
     String? contactName,
     String? lastMessage,
@@ -78,16 +91,19 @@ class Chat {
     ConnectionType? connectionType,
     String? avatarText,
     String? avatarUrl,
+    Uint8List? imageBytes,
   }) {
     return Chat(
+      identifier: identifier ?? this.identifier,
       id: id ?? this.id,
       contactName: contactName ?? this.contactName,
       lastMessage: lastMessage ?? this.lastMessage,
-      timestamp: timestamp ?? this.timestamp,
+      timestamp: timestamp ?? this.timestamp, 
       unreadCount: unreadCount ?? this.unreadCount,
       connectionType: connectionType ?? this.connectionType,
       avatarText: avatarText ?? this.avatarText,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      imageBytes: imageBytes ?? this.imageBytes,
     );
   }
 }
