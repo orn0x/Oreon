@@ -1,11 +1,6 @@
 import 'dart:typed_data';
 
-enum ConnectionType {
-  wifi,
-  bluetooth,
-  centralized,
-  decentralized,
-}
+enum ConnectionType { wifi, bluetooth, centralized, decentralized }
 
 class Chat {
   final String identifier;
@@ -55,7 +50,7 @@ class Chat {
   // Create from JSON
   factory Chat.fromJson(Map<String, dynamic> json) {
     return Chat(
-      identifier : json['identifier'],
+      identifier: json['identifier'],
       id: json['id'],
       contactName: json['contactName'],
       lastMessage: json['lastMessage'],
@@ -99,7 +94,7 @@ class Chat {
       id: id ?? this.id,
       contactName: contactName ?? this.contactName,
       lastMessage: lastMessage ?? this.lastMessage,
-      timestamp: timestamp ?? this.timestamp, 
+      timestamp: timestamp ?? this.timestamp,
       unreadCount: unreadCount ?? this.unreadCount,
       connectionType: connectionType ?? this.connectionType,
       avatarText: avatarText ?? this.avatarText,
