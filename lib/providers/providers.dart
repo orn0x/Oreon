@@ -5,7 +5,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:oreon/models/chat_model.dart';
-import 'package:oreon/models/message_model.dart' hide ConnectionType;
 import 'package:oreon/services/WIFI_Direct/wdirect_service.dart';
 import 'package:oreon/const/const.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -322,6 +321,8 @@ class ChatListProvider extends ChangeNotifier {
         avatarText: chat.avatarText,
         avatarUrl: chat.avatarUrl,
         imageBytes: chat.imageBytes,
+        deviceId: chat.deviceId,
+        avatarImageBytes: chat.avatarImageBytes,
       );
       notifyListeners();
     }
@@ -504,6 +505,7 @@ class MessageProvider extends ChangeNotifier {
         id: message.id,
         text: message.text,
         sender: "Me", // This should be the actual device name
+        appIdentifier: ConstApp().appIdentifier(),
         chatId: chatId,
         timestamp: message.timestamp,
         type: 'message',
@@ -546,6 +548,7 @@ class MessageProvider extends ChangeNotifier {
     try {
       // Send via WiFi Direct
       final chatMessage = ChatMessage(
+        appIdentifier: ConstApp().appIdentifier(),
         id: message.id,
         text: text,
         sender: senderName,
@@ -741,16 +744,6 @@ class WiFiDirectProvider extends ChangeNotifier {
     }
     _isScanning = false;
     notifyListeners();
-  }
-  
-  // Toggle debug mode
-  void toggleDebugMode() {
-    _controller?.toggleDebugMode();
-  }
-  
-  // Add test devices
-  void addTestDevices() {
-    _controller?.addTestDevices();
   }
   
   // Clear discovered devices

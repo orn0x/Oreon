@@ -31,6 +31,9 @@ class WiFiDirectController {
   final _messageController = StreamController<ChatMessage>.broadcast();
   Stream<ChatMessage> get messageStream => _messageController.stream;
 
+  // Debug mode flag
+  bool _debugMode = false;
+
   Future<void> initialize() async {
     final username = prefs.getString("username") ?? 'User';
     final uniqueId = '${DateTime.now().millisecondsSinceEpoch}_${username.hashCode.abs()}';
@@ -96,56 +99,14 @@ class WiFiDirectController {
     
     try {
       await _discoveryService.stopBroadcast();
-      // Don't clear devices immediately - keep them for a while
       debugPrint('✅ Discovery stopped');
     } catch (e) {
       debugPrint('❌ Error stopping discovery: $e');
     }
   }
-
-  // Debug mode flag
-  bool _debugMode = false;
-  
-  // Toggle debug mode to show self in discovery
-  void toggleDebugMode() {
-    _debugMode = !_debugMode;
-    _discoveryService.setDebugMode(_debugMode);
-    debugPrint('🔧 Debug mode ${_debugMode ? 'ENABLED' : 'DISABLED'} - ${_debugMode ? 'will show self' : 'others only'}');
-  }
-  
-  // Debug method to add test devices
-  void addTestDevices() {
-    final testDevices = [
-      DiscoveredDevice(
-        id: 'test_device_1',
-        name: '📱 Test iPhone',
-        timestamp: DateTime.now(),
-        imageBytes: _createTestImage(Colors.blue),
-      ),
-      DiscoveredDevice(
-        id: 'test_device_2', 
-        name: '🤖 Test Android',
-        timestamp: DateTime.now(),
-        imageBytes: _createTestImage(Colors.green),
-      ),
-      DiscoveredDevice(
-        id: 'test_device_3', 
-        name: '💻 Test Laptop',
-        timestamp: DateTime.now(),
-        imageBytes: _createTestImage(Colors.orange),
-      ),
-    ];
-    
-    final currentDevices = List<DiscoveredDevice>.from(nearbyDevices.value);
-    currentDevices.addAll(testDevices);
-    nearbyDevices.value = currentDevices;
-    
-    debugPrint('🧪 Added ${testDevices.length} test devices');
-  }
   
   // Create test avatar image
   Uint8List _createTestImage(Color color) {
-    // Create a simple colored square as test image
     final pixels = <int>[];
     for (int i = 0; i < 32 * 32; i++) {
       pixels.addAll([color.red, color.green, color.blue, 255]);
@@ -176,7 +137,13 @@ class WiFiDirectController {
   }
 
   Future<void> sendMessage(ChatMessage message) async {
-    await _messagingService.broadcast(message);
+    try {
+      await _messagingService.broadcast(message);
+      debugPrint('✅ Message sent: ${message.text}');
+    } catch (e) {
+      debugPrint('❌ Failed to send message: $e');
+      rethrow;
+    }
   }
 
   void dispose() {
@@ -379,6 +346,7 @@ class DiscoveryService {
       }
       
       final device = DiscoveredDevice(
+        appIdentifier: data['appIdentifier'] as String? ?? 'UnknownApp',
         id: data['deviceId'] as String,
         name: deviceName,
         timestamp: DateTime.now(),
@@ -500,6 +468,7 @@ class MessagingService {
   final int messagePort = 9877;
 
   RawDatagramSocket? _messageSocket;
+  final Set<String> _sentMessageIds = {};
 
   final _messageReceivedController = StreamController<ChatMessage>.broadcast();
   Stream<ChatMessage> get onMessageReceived => _messageReceivedController.stream;
@@ -527,7 +496,13 @@ class MessagingService {
 
                 if (decoded['type'] == 'message') {
                   final senderId = decoded['sender'] as String?;
-                  if (senderId != null && senderId != deviceId) {
+                  final messageId = decoded['id'] as String?;
+                  
+                  // Skip own messages and duplicates
+                  if (senderId != null && 
+                      senderId != deviceId && 
+                      messageId != null &&
+                      !_sentMessageIds.contains(messageId)) {
                     final message = ChatMessage.fromJson(decoded);
                     debugPrint('✅ Message from ${message.sender}: ${message.text}');
                     _messageReceivedController.add(message);
@@ -552,6 +527,7 @@ class MessagingService {
       socket.broadcastEnabled = true;
 
       final messageWithSender = ChatMessage(
+        appIdentifier: ConstApp().appIdentifier(),
         id: message.id,
         text: message.text,
         sender: deviceId,
@@ -560,28 +536,36 @@ class MessagingService {
         type: message.type,
       );
 
+      _sentMessageIds.add(messageWithSender.id);
+      
       final messageData = jsonEncode(messageWithSender.toJson());
       final messageBytes = utf8.encode(messageData);
       
-      debugPrint('📤 Broadcasting message: "${message.text}"');
+      debugPrint('📤 Broadcasting message: "${message.text}" (ID: ${message.id})');
       
-      final addresses = ['255.255.255.255', '192.168.1.255', '127.0.0.1'];
+      final addresses = ['255.255.255.255', '192.168.1.255', '192.168.0.255', '10.0.0.255'];
       
+      bool success = false;
       for (String addr in addresses) {
         try {
           final sent = socket.send(messageBytes, InternetAddress(addr), messagePort);
           if (sent > 0) {
-            debugPrint('✅ Message sent to $addr');
-            break;
+            debugPrint('✅ Message sent to $addr: $sent bytes');
+            success = true;
           }
         } catch (e) {
-          debugPrint('❌ Error sending to $addr: $e');
+          debugPrint('⚠️ Error sending to $addr: $e');
         }
       }
       
       socket.close();
+      
+      if (!success) {
+        debugPrint('❌ Message broadcast failed for all addresses');
+      }
     } catch (e) {
       debugPrint('❌ Message broadcast error: $e');
+      rethrow;
     }
   }
 
@@ -593,17 +577,20 @@ class MessagingService {
   void dispose() {
     _messageSocket?.close();
     _messageReceivedController.close();
+    _sentMessageIds.clear();
   }
 }
 
 // Data Models
 class DiscoveredDevice {
+  final String appIdentifier;
   final String id;
   final String name;
   final DateTime timestamp;
   final Uint8List? imageBytes;
 
   DiscoveredDevice({
+    required this.appIdentifier,
     required this.id,
     required this.name,
     required this.timestamp,
@@ -611,6 +598,7 @@ class DiscoveredDevice {
   });
 
   Map<String, dynamic> toJson() => {
+        'appIdentifier': appIdentifier,
         'id': id,
         'name': name,
         'timestamp': timestamp.toIso8601String(),
@@ -619,6 +607,7 @@ class DiscoveredDevice {
 
   factory DiscoveredDevice.fromJson(Map<String, dynamic> json) =>
       DiscoveredDevice(
+        appIdentifier: json['appIdentifier'] as String,
         id: json['id'] as String,
         name: json['name'] as String,
         timestamp: DateTime.parse(json['timestamp'] as String),
@@ -629,6 +618,7 @@ class DiscoveredDevice {
 }
 
 class ChatMessage {
+  final String appIdentifier;
   final String id;
   final String text;
   final String sender;
@@ -637,6 +627,7 @@ class ChatMessage {
   final String type;
 
   ChatMessage({
+    required this.appIdentifier,
     required this.id,
     required this.text,
     required this.sender,
@@ -646,6 +637,7 @@ class ChatMessage {
   });
 
   Map<String, dynamic> toJson() => {
+        'appIdentifier': appIdentifier,
         'id': id,
         'type': type,
         'text': text,
@@ -655,6 +647,7 @@ class ChatMessage {
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+        appIdentifier: json['appIdentifier'] as String,
         id: json['id'] as String,
         text: json['text'] as String,
         sender: json['sender'] as String,

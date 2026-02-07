@@ -48,6 +48,7 @@ class Chat {
       'connectionType': connectionType.toString(),
       'avatarText': avatarText,
       'avatarUrl': avatarUrl,
+      'imageBytes': imageBytes?.toString(),
     };
   }
 

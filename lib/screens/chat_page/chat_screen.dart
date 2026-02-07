@@ -4,11 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:oreon/const/const.dart';
 import 'package:oreon/models/chat_model.dart';
 import 'package:oreon/providers/providers.dart';
-import 'chat_detail_screen.dart';
+import 'chat_detail_screen_wifi.dart';
 
 
 class ChatsScreen extends StatefulWidget {
-  // Optional params when coming from discovery flow
   final String? userId;
   final String? avatarUrl;
   final String? contactName;
@@ -77,7 +76,7 @@ class _ChatsScreenState extends State<ChatsScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ChatDetailScreen(chat: chat),
+        builder: (_) => ChatDetailScreenWifi(chat: chat),
       ),
     );
   }

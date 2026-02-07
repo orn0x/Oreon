@@ -5,128 +5,44 @@ enum ConnectionType {
   decentralized,
 }
 
-class Message {
-  final String identifier;
+class MessageBluetooth {
   final String id;
-  final String text;
+  final String sender;
+  final String content;
   final DateTime timestamp;
-  final bool isFromMe;
-  bool isRead;
-  MessageStatus status;
-  final String? imageUrl;
-  final String? fileUrl;
-  final String? fileName;
-  final MessageType type;
+  final bool isOutgoing;
 
-  Message({
-    required this.identifier,
+  MessageBluetooth({
     required this.id,
-    required this.text,
+    required this.sender,
+    required this.content,
     required this.timestamp,
-    required this.isFromMe,
-    required this.isRead,
-    required this.status,
-    this.imageUrl,
-    this.fileUrl,
-    this.fileName,
-    this.type = MessageType.text,
+    required this.isOutgoing,
   });
 
-  // Convert to JSON
+  factory MessageBluetooth.fromJson(Map<String, dynamic> json) {
+    return MessageBluetooth(
+      id: json['id'] ?? '',
+      sender: json['sender'] ?? '',
+      content: json['content'] ?? '',
+      timestamp: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'])
+          : DateTime.now(),
+      isOutgoing: json['isOutgoing'] ?? false,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
-      'identifier': identifier,
       'id': id,
-      'text': text,
+      'sender': sender,
+      'content': content,
       'timestamp': timestamp.toIso8601String(),
-      'isFromMe': isFromMe,
-      'isRead': isRead,
-      'status': status.toString(),
-      'imageUrl': imageUrl,
-      'fileUrl': fileUrl,
-      'fileName': fileName,
-      'type': type.toString(),
+      'isOutgoing': isOutgoing,
     };
   }
-
-  // Create from JSON
-  factory Message.fromJson(Map<String, dynamic> json) {
-    return Message(
-      identifier : json['identifier'],
-      id: json['id'],
-      text: json['text'],
-      timestamp: DateTime.parse(json['timestamp']),
-      isFromMe: json['isFromMe'],
-      isRead: json['isRead'],
-      status: _statusFromString(json['status']),
-      imageUrl: json['imageUrl'],
-      fileUrl: json['fileUrl'],
-      fileName: json['fileName'],
-      type: _typeFromString(json['type']),
-    );
-  }
-
-  static MessageStatus _statusFromString(String status) {
-    switch (status) {
-      case 'MessageStatus.sending':
-        return MessageStatus.sending;
-      case 'MessageStatus.sent':
-        return MessageStatus.sent;
-      case 'MessageStatus.delivered':
-        return MessageStatus.delivered;
-      case 'MessageStatus.read':
-        return MessageStatus.read;
-      case 'MessageStatus.failed':
-        return MessageStatus.failed;
-      default:
-        return MessageStatus.sent;
-    }
-  }
-
-  static MessageType _typeFromString(String type) {
-    switch (type) {
-      case 'MessageType.text':
-        return MessageType.text;
-      case 'MessageType.image':
-        return MessageType.image;
-      case 'MessageType.file':
-        return MessageType.file;
-      case 'MessageType.location':
-        return MessageType.location;
-      default:
-        return MessageType.text;
-    }
-  }
-
-  // Create a copy with updated fields
-  Message copyWith({
-    String? identifier,
-    String? id,
-    String? text,
-    DateTime? timestamp,
-    bool? isFromMe,
-    bool? isRead,
-    MessageStatus? status,
-    String? imageUrl,
-    String? fileUrl,
-    String? fileName,
-    MessageType? type,
-  }) {
-    return Message(
-      identifier: identifier ?? this.identifier,
-      id: id ?? this.id,
-      text: text ?? this.text,
-      timestamp: timestamp ?? this.timestamp,
-      isFromMe: isFromMe ?? this.isFromMe,
-      isRead: isRead ?? this.isRead,
-      status: status ?? this.status,
-      imageUrl: imageUrl ?? this.imageUrl,
-      fileUrl: fileUrl ?? this.fileUrl,
-      fileName: fileName ?? this.fileName,
-      type: type ?? this.type,
-    );
-  }
 }
+
 
 enum MessageStatus {
   sending,
