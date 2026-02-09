@@ -1,0 +1,1 @@
+ C:\\polygone\\.dart_tool\\flutter_build\\0263811c241544b87899fb4481d23530\\native_assets.json: 

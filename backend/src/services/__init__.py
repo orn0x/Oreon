@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import Config
 from .database import *
 
-def polygone():
+def oreon():
     app = FastAPI(
         title=Config.API_TITLE,
         version=Config.API_VERSION,
@@ -25,7 +25,7 @@ def polygone():
     @app.get("/")
     async def root():
         return {
-            "message": "Welcome to Polygone API",
+            "message": "Welcome to Oreon API",
             "version": Config.API_VERSION,
             "docs": "/docs"
         }

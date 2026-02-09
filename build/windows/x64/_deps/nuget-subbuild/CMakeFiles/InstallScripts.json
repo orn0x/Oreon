@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/polygone/build/windows/x64/_deps/nuget-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

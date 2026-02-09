@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\cd2a73468cc5f7176e163835fef8710d\nuget-populate-mkdir.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\cd2a73468cc5f7176e163835fef8710d\nuget-populate-download.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\cd2a73468cc5f7176e163835fef8710d\nuget-populate-update.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\cd2a73468cc5f7176e163835fef8710d\nuget-populate-patch.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\cd2a73468cc5f7176e163835fef8710d\nuget-populate-copyfile.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\cd2a73468cc5f7176e163835fef8710d\nuget-populate-configure.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\cd2a73468cc5f7176e163835fef8710d\nuget-populate-build.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\cd2a73468cc5f7176e163835fef8710d\nuget-populate-install.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\cd2a73468cc5f7176e163835fef8710d\nuget-populate-test.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\5597061a610416348cb8450195647f4e\nuget-populate-complete.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\4356291dcda80e1c65d6649b56952e02\nuget-populate.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\polygone\build\windows\x64\_deps\nuget-subbuild\CMakeFiles\nuget-populate" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{76554E38-6873-3F0E-A6BA-9A00022ED157}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

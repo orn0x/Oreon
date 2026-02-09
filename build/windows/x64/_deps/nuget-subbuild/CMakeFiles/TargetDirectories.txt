@@ -1,0 +1,3 @@
+C:/polygone/build/windows/x64/_deps/nuget-subbuild/CMakeFiles/nuget-populate.dir
+C:/polygone/build/windows/x64/_deps/nuget-subbuild/CMakeFiles/ALL_BUILD.dir
+C:/polygone/build/windows/x64/_deps/nuget-subbuild/CMakeFiles/ZERO_CHECK.dir
