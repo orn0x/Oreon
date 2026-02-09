@@ -3,17 +3,18 @@ class BluetoothDeviceModel {
   final String name;
   final bool isConnected;
   final int? rssi;
+  final String appIdentifier;
 
   BluetoothDeviceModel({
     required this.address,
     required this.name,
     required this.isConnected,
     this.rssi,
+    required this.appIdentifier,
   });
 
   @override
-  String toString() => 'BluetoothDevice(address: $address, name: $name, isConnected: $isConnected, rssi: $rssi)';
-
+  String toString() => 'BluetoothDevice(address: $address, name: $name, isConnected: $isConnected, rssi: $rssi, appIdentifier: $appIdentifier)';
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

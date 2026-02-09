@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:typed_data';
 import 'package:oreon/screens/chat_page/chat_detail_screen_wifi.dart';
 import 'package:oreon/screens/chat_page/chat_detail_screen_blue.dart';
 import 'package:oreon/services/Bluetooth/bluetooth_service.dart';
@@ -32,6 +33,7 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
   List<DeviceWrapper> _filteredContacts = [];
 
   bool _isDisposed = false;
+  bool _showOnlyAppContacts = false;
   StreamSubscription? _bluetoothSubscription;
 
   static const Duration _scanDuration = Duration(seconds: 25);
@@ -164,12 +166,12 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
 
       // WiFi Direct devices
       for (final device in _wifiController.nearbyDevices.value) {
-        combined.add(DeviceWrapper.fromWifi(device));
+          combined.add(DeviceWrapper.fromWifi(device));
       }
 
       // Bluetooth devices
       for (final device in _bluetoothService.discoveredDevices) {
-        combined.add(DeviceWrapper.fromBluetooth(device));
+          combined.add(DeviceWrapper.fromBluetooth(device));
       }
 
       // Remove duplicates & assign stable distance
@@ -184,13 +186,21 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
       }
 
       _safeSetState(() {
-        if (query.isEmpty) {
-          _filteredContacts = uniqueDevices;
-        } else {
-          _filteredContacts = uniqueDevices
+        var results = uniqueDevices;
+        
+        // Apply app filter if enabled
+        if (_showOnlyAppContacts) {
+          results = results.where((d) => d.isFromApp).toList();
+        }
+        
+        // Apply search filter
+        if (query.isNotEmpty) {
+          results = results
               .where((d) => d.name.toLowerCase().contains(query))
               .toList();
         }
+        
+        _filteredContacts = results;
       });
     } catch (e) {
       _showSnackBar('Error filtering devices: $e', isError: true);
@@ -311,6 +321,20 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
                         ),
                       ),
                     ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.filter_list_rounded,
+                      color: _showOnlyAppContacts ? Colors.tealAccent : Colors.white70,
+                    ),
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      _safeSetState(() {
+                        _showOnlyAppContacts = !_showOnlyAppContacts;
+                      });
+                      _filterContacts();
+                    },
+                    tooltip: _showOnlyAppContacts ? 'Showing app contacts only' : 'Show all contacts',
+                  ),
                   IconButton(
                     icon: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
@@ -520,7 +544,7 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
                             border: Border.all(color: const Color(0xFF0D0F14), width: 2.2),
                           ),
                           child: Icon(
-                            (device.isBluetooth ? Icons.bluetooth : Icons.wifi) as IconData?,
+                            device.isBluetooth ? Icons.bluetooth : Icons.wifi,
                             size: 13,
                             color: Colors.white,
                           ),
@@ -528,9 +552,31 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
                       ),
                     ],
                   ),
-                  title: Text(
-                    device.name.isEmpty ? 'Unknown Device' : device.name,
-                    style: const TextStyle(color: Colors.white, fontSize: 16.5, fontWeight: FontWeight.w600),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          device.name.isEmpty ? 'Unknown Device' : device.name,
+                          style: const TextStyle(color: Colors.white, fontSize: 16.5, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      if (device.isFromApp)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.tealAccent.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'App',
+                            style: TextStyle(
+                              color: Colors.tealAccent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 5),
@@ -611,6 +657,7 @@ class DeviceWrapper {
   final DateTime timestamp;
   final Uint8List? imageBytes;
   final bool isBluetooth;
+  final bool isFromApp;
 
   DeviceWrapper({
     required this.appIdentifier,
@@ -619,27 +666,32 @@ class DeviceWrapper {
     required this.timestamp,
     this.imageBytes,
     required this.isBluetooth,
+    required this.isFromApp,
   });
 
   factory DeviceWrapper.fromWifi(DiscoveredDevice device) {
+    final currentAppId = ConstApp().appIdentifier();
     return DeviceWrapper(
-      appIdentifier: ConstApp().appIdentifier(),
+      appIdentifier: currentAppId,
       id: device.id,
       name: device.name.isEmpty ? 'Unknown' : device.name,
       timestamp: device.timestamp,
       imageBytes: device.imageBytes,
       isBluetooth: false,
+      isFromApp: device.appIdentifier == currentAppId,
     );
   }
 
   factory DeviceWrapper.fromBluetooth(BluetoothDeviceModel device) {
+    final currentAppId = ConstApp().appIdentifier();
     return DeviceWrapper(
-      appIdentifier: ConstApp().appIdentifier(),
+      appIdentifier: currentAppId,
       id: device.address,
       name: device.name.isNotEmpty ? device.name : 'Unknown',
       timestamp: DateTime.now(),
       imageBytes: null,
       isBluetooth: true,
+      isFromApp: device.appIdentifier == currentAppId,
     );
   }
 }

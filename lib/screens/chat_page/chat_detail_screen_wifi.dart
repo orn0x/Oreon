@@ -60,9 +60,7 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
       // Get my actual device ID and name from WiFi Direct controller
       _myDeviceName = prefs.getString("name") ?? "Unknown User";
       
-      // Extract device ID from the controller (it's set during initialize)
-      // For now, we'll use a consistent identifier based on the app
-      _myDeviceId = 'Device_${prefs.getString("username") ?? "User"}_${prefs.getString("user_id") ?? "unknown"}';
+      _myDeviceId = 'Device_${prefs.getString("username") ?? "User"}_${prefs.getString("user_uuid") ?? "unknown"}';
       
       debugPrint('✅ WiFi Direct initialized');
       debugPrint('   Device Name: $_myDeviceName');
@@ -70,8 +68,10 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
       debugPrint('   Chat ID: ${widget.chat.id}');
       
       // Subscribe to incoming messages
+      debugPrint('👂 Setting up message stream listener...');
       _messageStreamSubscription = _wifiController.messageStream.listen(
         (chatMessage) {
+          debugPrint('🔔 Message stream event triggered');
           _handleIncomingMessage(chatMessage);
         },
         onError: (error) {
@@ -82,7 +82,7 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
         },
       );
       
-      debugPrint('👂 Subscribed to message stream');
+      debugPrint('✅ Message stream listener attached');
       
     } catch (e) {
       debugPrint('❌ WiFi Direct initialization failed: $e');
@@ -103,41 +103,69 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
     debugPrint('   From: ${chatMessage.sender}');
     debugPrint('   Text: ${chatMessage.text}');
     debugPrint('   ChatId: ${chatMessage.chatId}');
-    debugPrint('   My ID: $_myDeviceId');
+    debugPrint('   Message ID: ${chatMessage.id}');
+    debugPrint('   My Name: $_myDeviceName');
+    debugPrint('   My Device ID: $_myDeviceId');
+    debugPrint('   Expected Chat ID: ${widget.chat.id}');
     
     // Check if this message is for our chat
     if (chatMessage.chatId != widget.chat.id) {
-      debugPrint('⏭️ Message is for different chat, ignoring');
+      debugPrint('⏭️ Message is for different chat (${chatMessage.chatId} != ${widget.chat.id}), ignoring');
       return;
     }
     
     // Skip our own messages (already added by provider)
     if (chatMessage.sender == _myDeviceName) {
-      debugPrint('⏭️ Skipping own message');
+      debugPrint('⏭️ Skipping own message (sender matches: $_myDeviceName)');
       return;
     }
     
-    debugPrint('✅ Adding message to provider');
+    debugPrint('✅ Message passed all filters, adding to provider');
     
     if (mounted) {
-      // Check if message already exists
-      final existingMessages = context.read<MessageProvider>().getMessagesForChat(widget.chat.id);
-      final isDuplicate = existingMessages.any((m) => m.id == chatMessage.id);
-      
-      if (isDuplicate) {
-        debugPrint('⏭️ Message already exists, skipping duplicate');
-        return;
+      try {
+        // Get current messages before adding
+        final messageProvider = context.read<MessageProvider>();
+        final existingMessages = messageProvider.getMessagesForChat(widget.chat.id);
+        debugPrint('   Existing messages in chat: ${existingMessages.length}');
+        
+        // Check if message already exists
+        final isDuplicate = existingMessages.any((m) => m.id == chatMessage.id);
+        
+        if (isDuplicate) {
+          debugPrint('⏭️ Message already exists (ID: ${chatMessage.id}), skipping duplicate');
+          return;
+        }
+        
+        debugPrint('📝 Creating Message object from ChatMessage');
+        debugPrint('   ID: ${chatMessage.id}');
+        debugPrint('   Text: ${chatMessage.text}');
+        debugPrint('   Sender: ${chatMessage.sender}');
+        
+        // Add message to provider
+        messageProvider.addMessage(
+          chatId: widget.chat.id,
+          text: chatMessage.text,
+          isFromMe: false,
+          messageId: chatMessage.id,
+        );
+        
+        debugPrint('✅ Message added to provider successfully');
+        
+        // Verify message was added
+        final updatedMessages = messageProvider.getMessagesForChat(widget.chat.id);
+        debugPrint('   Messages after add: ${updatedMessages.length}');
+        debugPrint('   Last message text: ${updatedMessages.isNotEmpty ? updatedMessages.last.text : "none"}');
+        
+        // Scroll to bottom
+        _scrollToBottom();
+        
+      } catch (e) {
+        debugPrint('❌ Error adding message to provider: $e');
+        debugPrint('   Stack trace: ${e.toString()}');
       }
-      
-      context.read<MessageProvider>().addMessage(
-        chatId: widget.chat.id,
-        text: chatMessage.text,
-        isFromMe: false,
-        messageId: chatMessage.id,
-      );
-      
-      debugPrint('✅ Message added to chat');
-      _scrollToBottom();
+    } else {
+      debugPrint('⚠️ Widget not mounted, cannot add message');
     }
   }
 

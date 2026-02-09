@@ -5,22 +5,15 @@ import 'package:oreon/const/const.dart';
 import 'package:oreon/models/chat_model.dart';
 import 'package:oreon/providers/providers.dart';
 import 'chat_detail_screen_wifi.dart';
-
+import 'chat_detail_screen_blue.dart';
 
 class ChatsScreen extends StatefulWidget {
-  final String? userId;
-  final String? avatarUrl;
-  final String? contactName;
-  final String? deviceId;
-  final Uint8List? contactImageBytes;
+  final Chat? chat;
+  // final Uint8List? contactImageBytes;
 
   const ChatsScreen({
     super.key,
-    this.userId,
-    this.avatarUrl,
-    this.contactName,
-    this.deviceId,
-    this.contactImageBytes,
+    this.chat,
   });
 
   @override
@@ -39,8 +32,7 @@ class _ChatsScreenState extends State<ChatsScreen>
       duration: const Duration(seconds: 3),
     )..repeat();
 
-    // Add discovered contact if passed via constructor (e.g. from discovery callback)
-    if (widget.deviceId != null && widget.contactName != null) {
+    if (widget.chat != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _addDiscoveredContact();
       });
@@ -57,26 +49,71 @@ class _ChatsScreenState extends State<ChatsScreen>
     final chatProvider = context.read<ChatListProvider>();
 
     final newChat = Chat(
-      identifier: ConstApp().appIdentifier(),
-      id: widget.deviceId!,
-      contactName: widget.contactName!,
+      identifier: widget.chat!.identifier,
+      id: widget.chat!.id,
+      contactName: widget.chat!.contactName,
       lastMessage: "",
       timestamp: DateTime.now(),
       unreadCount: 0,
       connectionType: ConnectionType.wifi,
-      avatarText: widget.contactName![0].toUpperCase(),
-      deviceId: widget.deviceId,
-      avatarImageBytes: widget.contactImageBytes,
+      avatarText: widget.chat!.contactName[0].toUpperCase(),
+      deviceId: widget.chat!.deviceId,
+      avatarImageBytes: widget.chat!.avatarImageBytes,
     );
 
     chatProvider.addOrUpdateChat(newChat);
   }
 
   void _navigateToChat(Chat chat) {
+    Widget screen;
+
+    switch (chat.connectionType) {
+      case ConnectionType.bluetooth:
+        screen = ChatDetailScreenBlue(chat: chat);
+        break;
+      case ConnectionType.wifi:
+        screen = ChatDetailScreenWifi(chat: chat);
+        break;
+      case ConnectionType.centralized:
+        screen = ChatDetailScreenWifi(chat: chat);
+        break;
+      default:
+        screen = ChatDetailScreenWifi(chat: chat);
+    }
+
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ChatDetailScreenWifi(chat: chat),
+      MaterialPageRoute(builder: (_) => screen),
+    );
+  }
+
+  void _deleteContact(Chat chat) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1a1d26),
+        title: Text(
+          'Delete ${chat.contactName}?',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'This contact will be removed from your chat list.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.tealAccent)),
+          ),
+          TextButton(
+            onPressed: () {
+              final chatProvider = context.read<ChatListProvider>();
+              chatProvider.removeChat(chat.id);
+              Navigator.pop(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }
@@ -140,78 +177,111 @@ class _ChatsScreenState extends State<ChatsScreen>
       itemCount: chats.length,
       itemBuilder: (context, index) {
         final chat = chats[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.03),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.06)),
+        return Dismissible(
+          key: ValueKey(chat.id),
+          direction: DismissDirection.endToStart,
+          onDismissed: (direction) {
+            final chatProvider = context.read<ChatListProvider>();
+            chatProvider.removeChat(chat.id);
+          },
+          background: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            child: const Icon(Icons.delete_outline, color: Colors.white),
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            leading: CircleAvatar(
-              radius: 28,
-              backgroundColor: Colors.teal.withOpacity(0.25),
-              foregroundImage: chat.avatarImageBytes != null
-                  ? MemoryImage(chat.avatarImageBytes!)
-                  : null,
-              child: chat.avatarImageBytes == null
-                  ? Text(
-                      chat.avatarText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    )
-                  : null,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
             ),
-            title: Text(
-              chat.contactName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 17,
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              leading: CircleAvatar(
+                radius: 28,
+                backgroundColor: Colors.teal.withValues(alpha: 0.25),
+                foregroundImage: chat.avatarImageBytes != null
+                    ? MemoryImage(chat.avatarImageBytes!)
+                    : null,
+                child: chat.avatarImageBytes == null
+                    ? Text(
+                        chat.avatarText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      )
+                    : null,
               ),
-            ),
-            subtitle: Text(
-              _getConnectionLabel(chat.connectionType),
-              style: TextStyle(
-                color: Colors.tealAccent.withOpacity(0.85),
-                fontSize: 13,
-              ),
-            ),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (chat.unreadCount > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.tealAccent,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${chat.unreadCount}',
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatTimeAgo(chat.timestamp),
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.45),
-                    fontSize: 12,
-                  ),
+              title: Text(
+                chat.contactName,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 17,
                 ),
-              ],
+              ),
+              subtitle: Text(
+                _getConnectionLabel(chat.connectionType),
+                style: TextStyle(
+                  color: Colors.tealAccent.withValues(alpha: 0.85),
+                  fontSize: 13,
+                ),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (chat.unreadCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.tealAccent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${chat.unreadCount}',
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatTimeAgo(chat.timestamp),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.45),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    iconSize: 20,
+                    onPressed: () => _deleteContact(chat),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
+              onTap: () => _navigateToChat(chat),
             ),
-            onTap: () => _navigateToChat(chat),
           ),
         );
       },
@@ -238,14 +308,14 @@ class _ChatsScreenState extends State<ChatsScreen>
             child: Icon(
               isScanning ? Icons.radar : Icons.sensors_off,
               size: 90,
-              color: isScanning ? Colors.tealAccent.withOpacity(0.4) : Colors.white.withOpacity(0.12),
+              color: isScanning ? Colors.tealAccent.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.12),
             ),
           ),
           const SizedBox(height: 32),
           Text(
             isScanning ? "Scanning nearby devices..." : "No active chats",
             style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
+              color: Colors.white.withValues(alpha: 0.5),
               fontSize: 20,
               fontWeight: FontWeight.w500,
             ),
@@ -257,7 +327,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                 : "Start scanning to discover nearby contacts",
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
+              color: Colors.white.withValues(alpha: 0.35),
               fontSize: 15,
             ),
           ),
@@ -282,7 +352,7 @@ class _StaticBackgroundGlow extends StatelessWidget {
           shape: BoxShape.circle,
           gradient: RadialGradient(
             colors: [
-              Colors.teal.withOpacity(0.12),
+              Colors.teal.withValues(alpha: 0.12),
               Colors.transparent,
             ],
             stops: const [0.0, 0.7],

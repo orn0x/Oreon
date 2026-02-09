@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import 'package:oreon/const/const.dart';
 import 'package:oreon/main.dart';
@@ -20,6 +21,17 @@ class BluetoothService {
   final StreamController<BluetoothDeviceModel> _deviceFoundController = StreamController<BluetoothDeviceModel>.broadcast();
   final StreamController<bool> _connectionStateController = StreamController<bool>.broadcast();
   final List<BluetoothDeviceModel> _discoveredDevices = [];
+
+  // Add retry mechanism
+  int _reconnectAttempts = 0;
+  final int _maxReconnectAttempts = 3;
+  Timer? _reconnectTimer;
+
+  // Add connection status getter
+  String get connectionStatus {
+    if (_connectedDevice == null) return 'Disconnected';
+    return 'Connected';
+  }
 
   factory BluetoothService() {
     return _instance;
@@ -96,6 +108,7 @@ class BluetoothService {
                 name: deviceName,
                 isConnected: false,
                 rssi: result.rssi,
+                appIdentifier: '',
               );
               _discoveredDevices.add(device);
               _deviceFoundController.add(device);
@@ -106,6 +119,7 @@ class BluetoothService {
                 name: deviceName,
                 isConnected: false,
                 rssi: result.rssi,
+                appIdentifier: _discoveredDevices[existingIndex].appIdentifier,
               );
               // Notify listeners of update
               _deviceFoundController.add(_discoveredDevices[existingIndex]);
@@ -140,7 +154,7 @@ class BluetoothService {
     _discoveredDevices.clear();
   }
 
-  // Connect to device
+  // Enhanced connect with retry logic
   Future<bool> connectToDevice(String deviceAddress) async {
     try {
       final deviceId = fbp.DeviceIdentifier(deviceAddress);
@@ -148,6 +162,7 @@ class BluetoothService {
 
       await device.connect(license: fbp.License.free);
       _connectedDevice = device;
+      _reconnectAttempts = 0; // Reset on successful connection
 
       // Get services
       final services = await device.discoverServices();
@@ -163,7 +178,7 @@ class BluetoothService {
               try {
                 await characteristic.setNotifyValue(true);
               } catch (e) {
-                // Notification setup failed, continue
+                debugPrint('⚠️ Notification setup failed: $e');
               }
             }
           }
@@ -178,21 +193,54 @@ class BluetoothService {
         });
       }
 
-      // Monitor connection state
+      // Monitor connection state with auto-reconnect
       _connectionStateSubscription = device.connectionState.listen((state) {
         final connected = state == fbp.BluetoothConnectionState.connected;
         _connectionStateController.add(connected);
         if (!connected) {
-          _cleanupConnection();
+          _handleDisconnection(deviceAddress);
         }
       });
 
       _connectionStateController.add(true);
       return true;
     } catch (e) {
-      _cleanupConnection();
+      debugPrint('❌ Connection failed: $e');
+      _handleConnectionError(deviceAddress);
       return false;
     }
+  }
+
+  // Handle disconnection with auto-reconnect
+  void _handleDisconnection(String deviceAddress) {
+    debugPrint('⚠️ Device disconnected, attempting reconnect...');
+    _cleanupConnection();
+    _attemptReconnect(deviceAddress);
+  }
+
+  // Handle connection errors
+  void _handleConnectionError(String deviceAddress) {
+    debugPrint('❌ Connection error, will retry...');
+    _cleanupConnection();
+    _attemptReconnect(deviceAddress);
+  }
+
+  // Attempt to reconnect with exponential backoff
+  void _attemptReconnect(String deviceAddress) {
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      debugPrint('❌ Max reconnection attempts reached');
+      _connectionStateController.add(false);
+      return;
+    }
+
+    _reconnectAttempts++;
+    final delaySeconds = (2 ^ _reconnectAttempts).clamp(1, 16); // Exponential backoff: 2, 4, 8, 16 seconds
+    
+    debugPrint('🔄 Scheduling reconnect attempt $_reconnectAttempts/$_maxReconnectAttempts in ${delaySeconds}s');
+    
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
+      connectToDevice(deviceAddress);
+    });
   }
 
   // Disconnect
@@ -233,6 +281,7 @@ class BluetoothService {
     _scanSubscription?.cancel();
     _connectionStateSubscription?.cancel();
     _rxSubscription?.cancel();
+    _reconnectTimer?.cancel();
     _messageController.close();
     _deviceFoundController.close();
     _connectionStateController.close();
