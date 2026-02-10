@@ -9,7 +9,7 @@ from src.database import get_db
 from src.models.user import UserCreate, UserResponse, Token, User
 from src.services.user_service import UserService
 from src.auth.jwt_handler import JWTHandler
-from src.auth.dependencies import get_current_active_user, get_current_superuser, get_current_user
+from src.auth.dependecies import get_current_active_user, get_current_superuser, get_current_user
 from config import Config
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])

@@ -1,25 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Permissions for Android 12 (API 31) and above -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
 
-    <!-- Permissions for older Android versions (API < 31) -->
     <uses-permission android:name="android.permission.BLUETOOTH"/>
 
-    <!-- Optional: if your app needs to find nearby Bluetooth devices without using location -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    
-    <!-- Required for apps targeting Android 10 (API 29) or higher to get scan results -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    
-    <!-- For Android 13 (API 33) or higher, the NEARBY_WIFI_DEVICES permission is part of the Nearby devices permission group -->
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
 

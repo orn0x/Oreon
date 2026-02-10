@@ -43,7 +43,7 @@ class WiFiDirectController {
     
     // Set initial online status
     isOnline.value = true;
-    
+
     debugPrint('WiFiDirectController initialized with ID: $_deviceId');
   }
 
@@ -441,7 +441,7 @@ class DiscoveryService {
       '192.168.0.255',
       '10.0.0.255',
       '172.16.255.255',
-      '127.0.0.1', // localhost for testing
+      '127.0.0.1',
     ]);
     
     // Remove duplicates
@@ -581,7 +581,6 @@ class MessagingService {
   }
 }
 
-// Data Models
 class DiscoveredDevice {
   final String appIdentifier;
   final String id;

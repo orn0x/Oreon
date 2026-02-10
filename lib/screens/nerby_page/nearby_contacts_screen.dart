@@ -258,7 +258,7 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
 
       final chatProvider = context.read<ChatListProvider>();
       final chat = Chat(
-        identifier: ConstApp().appIdentifier(),
+        identifier: device.appIdentifier,
         id: device.id,
         contactName: device.name.isEmpty ? 'Unknown' : device.name,
         lastMessage: device.isBluetooth
@@ -670,7 +670,7 @@ class DeviceWrapper {
   });
 
   factory DeviceWrapper.fromWifi(DiscoveredDevice device) {
-    final currentAppId = ConstApp().appIdentifier();
+    final currentAppId = device.appIdentifier; // Use the device's app identifier for WiFi Direct
     return DeviceWrapper(
       appIdentifier: currentAppId,
       id: device.id,
@@ -683,7 +683,7 @@ class DeviceWrapper {
   }
 
   factory DeviceWrapper.fromBluetooth(BluetoothDeviceModel device) {
-    final currentAppId = ConstApp().appIdentifier();
+    final currentAppId = device.appIdentifier; // Use the device's app identifier for Bluetooth
     return DeviceWrapper(
       appIdentifier: currentAppId,
       id: device.address,

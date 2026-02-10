@@ -4,3 +4,6 @@ cname:
 logo:
 	flutter pub get
 	flutter pub run flutter_launcher_icons:main
+update:
+	git fetch
+	git merge

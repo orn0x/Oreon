@@ -5,7 +5,6 @@ from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional, List
 
-# --- SQLAlchemy Model ---
 
 class User(Base):
     __tablename__ = "users"
@@ -17,10 +16,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
-    
-    # NEW FIELD: This solves your AttributeError
-    role = Column(String, default="user", nullable=False) # e.g., 'worker', 'farmer', 'admin'
-    
+    role = Column(String, default="user", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     farm_name = Column(String, nullable=True)
