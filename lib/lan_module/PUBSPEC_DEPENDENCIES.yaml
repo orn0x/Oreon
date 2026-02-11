@@ -1,0 +1,27 @@
+## LAN Module Dependencies
+##
+## Add these packages to your pubspec.yaml dependencies section
+##
+## Note: Keep your existing Flutter version constraints
+
+## Required packages for the LAN module:
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Device information (for getting device name)
+  device_info_plus: ^10.1.0
+
+  # Network information (for getting local IP address)
+  network_info_plus: ^5.0.0
+
+  # UUID generation (for message IDs)
+  uuid: ^4.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
