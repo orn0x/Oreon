@@ -250,14 +250,3 @@ Isolated.
 Replaceable.
 
 ---
-
-If you want next, I can:
-
-- Design the exact interface both LAN and Bluetooth must follow
-    
-- Show how to structure it using Clean Architecture pattern
-    
-- Or show how to write it so multiple teammates can work safely
-    
-
-Tell me which direction you want.

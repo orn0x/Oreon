@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'dart:typed_data';
 import 'package:provider/provider.dart';
-import 'package:oreon/const/const.dart';
 import 'package:oreon/models/chat_model.dart';
 import 'package:oreon/providers/providers.dart';
 import 'chat_detail_screen_wifi.dart';
-import 'chat_detail_screen_blue.dart';
 
 class ChatsScreen extends StatefulWidget {
   final Chat? chat;
@@ -69,7 +66,7 @@ class _ChatsScreenState extends State<ChatsScreen>
 
     switch (chat.connectionType) {
       case ConnectionType.bluetooth:
-        screen = ChatDetailScreenBlue(chat: chat);
+        screen = ChatDetailScreenWifi(chat: chat);
         break;
       case ConnectionType.wifi:
         screen = ChatDetailScreenWifi(chat: chat);
@@ -132,9 +129,9 @@ class _ChatsScreenState extends State<ChatsScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<ChatListProvider, WiFiDirectProvider>(
-      builder: (context, chatProvider, wifiProvider, _) {
-        final isScanning = wifiProvider.isScanning; // ← real state from provider
+    return Consumer<ChatListProvider>(
+      builder: (context, chatProvider, _) {
+        final isScanning = false; // Set default scanning state
 
         return Scaffold(
           backgroundColor: const Color(0xFF0D0F14),

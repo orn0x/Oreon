@@ -1,13 +1,41 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:oreon/models/chat_model.dart';
-import 'package:oreon/services/WIFI_Direct/wdirect_service.dart';
 import 'package:oreon/const/const.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:oreon/services/WIFI/lan_module/lan_controller.dart';
+
+enum MessageStatus {
+  sending,
+  sent,
+  delivered,
+  read,
+  failed,
+}
+
+// ChatMessage model for passing messages between services
+class ChatMessage {
+  final String id;
+  final String text;
+  final String sender;
+  final String appIdentifier;
+  final String chatId;
+  final DateTime timestamp;
+  final String type;
+
+  ChatMessage({
+    required this.id,
+    required this.text,
+    required this.sender,
+    required this.appIdentifier,
+    required this.chatId,
+    required this.timestamp,
+    required this.type,
+  });
+}
 
 class UserProvider extends ChangeNotifier {
   String _userName = 'User Name';
@@ -224,7 +252,7 @@ class ChatListProvider extends ChangeNotifier {
     required String deviceId,
     String? avatarUrl,
     Uint8List? imageBytes,
-    ConnectionType connectionType = ConnectionType.wifi,
+    required ConnectionType connectionType,
   }) {
     final existingChatIndex = _chats.indexWhere((chat) => chat.id == deviceId);
     
@@ -263,7 +291,7 @@ class ChatListProvider extends ChangeNotifier {
         avatarImageBytes: imageBytes,
       );
       
-      _chats.insert(0, newChat); // Add at the beginning for recent chats
+      _chats.insert(0, newChat);
       notifyListeners();
       return newChat;
     }
@@ -368,7 +396,7 @@ class MessageProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   StreamSubscription? _messageSubscription;
-  WiFiDirectController? _wifiController;
+  late LanController _lanController;
 
   // Getters
   List<Message> getMessagesForChat(String chatId) {
@@ -391,13 +419,9 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
-      // Initialize WiFi Direct controller
-      _wifiController = WiFiDirectController();
-      await _wifiController!.initialize();
-      await _wifiController!.startMessaging();
-      
-      // Listen to incoming messages
-      _messageSubscription = _wifiController!.messageStream.listen(_handleIncomingMessage);
+      // Initialize LAN controller
+      _lanController = LanController();
+      await _lanController.start();
       
       // Load existing messages from storage
       await loadMessagesFromStorage();
@@ -436,34 +460,6 @@ class MessageProvider extends ChangeNotifier {
     ];
   }
   
-  void _handleIncomingMessage(ChatMessage message) {
-    // Use the chatId from the message, or fall back to sender for legacy messages
-    String chatId = message.chatId;
-    if (chatId.isEmpty) {
-      chatId = message.sender; // Fallback for older messages
-    }
-    
-    debugPrint('📨 MessageProvider handling message from ${message.sender} for chat $chatId');
-    
-    final newMessage = Message(
-      id: message.id,
-      text: message.text,
-      timestamp: message.timestamp,
-      isFromMe: false,
-      isRead: false,
-      status: MessageStatus.delivered,
-    );
-    
-    // Add message to chat
-    if (_chatMessages[chatId] == null) {
-      _chatMessages[chatId] = [];
-    }
-    _chatMessages[chatId]!.add(newMessage);
-    
-    debugPrint('✅ Message added to chat $chatId. Total messages: ${_chatMessages[chatId]!.length}');
-    
-    notifyListeners();
-  }
 
   // Add a message to a chat
   Message addMessage({
@@ -501,17 +497,6 @@ class MessageProvider extends ChangeNotifier {
 
   Future<void> _sendViaWiFiDirect(String chatId, Message message) async {
     try {
-      final chatMessage = ChatMessage(
-        id: message.id,
-        text: message.text,
-        sender: "Me", // This should be the actual device name
-        appIdentifier: ConstApp().appIdentifier(),
-        chatId: chatId,
-        timestamp: message.timestamp,
-        type: 'message',
-      );
-
-      await _wifiController!.sendMessage(chatMessage);
       _updateMessageStatus(chatId, message.id, MessageStatus.sent);
       
       // Simulate delivery
@@ -546,19 +531,6 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Send via WiFi Direct
-      final chatMessage = ChatMessage(
-        appIdentifier: ConstApp().appIdentifier(),
-        id: message.id,
-        text: text,
-        sender: senderName,
-        chatId: chatId,
-        timestamp: message.timestamp,
-        type: 'message',
-      );
-
-      await _wifiController!.sendMessage(chatMessage);
-      
       // Update status to sent
       _updateMessageStatus(chatId, message.id, MessageStatus.sent);
       
@@ -644,18 +616,8 @@ class MessageProvider extends ChangeNotifier {
   @override
   void dispose() {
     _messageSubscription?.cancel();
-    _wifiController?.stopMessaging();
     super.dispose();
   }
-}
-
-// Message status enum
-enum MessageStatus {
-  sending,
-  sent,
-  delivered,
-  read,
-  failed,
 }
 
 // Message model for provider
@@ -675,86 +637,4 @@ class Message {
     required this.isRead,
     required this.status,
   });
-}
-
-// WiFi Direct Provider for managing device discovery and connections
-class WiFiDirectProvider extends ChangeNotifier {
-  WiFiDirectController? _controller;
-  List<DiscoveredDevice> _nearbyDevices = [];
-  bool _isScanning = false;
-  bool _isConnected = false;
-  String? _error;
-  StreamSubscription? _deviceSubscription;
-
-  // Getters
-  List<DiscoveredDevice> get nearbyDevices => List.unmodifiable(_nearbyDevices);
-  bool get isScanning => _isScanning;
-  bool get isConnected => _isConnected;
-  String? get error => _error;
-  int get deviceCount => _nearbyDevices.length;
-  
-  // Initialize WiFi Direct
-  Future<void> initialize() async {
-    try {
-      _controller = WiFiDirectController();
-      await _controller!.initialize();
-      
-      // Listen to device discoveries
-      _controller!.nearbyDevices.addListener(_updateNearbyDevices);
-      
-      _isConnected = true;
-      _error = null;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      _isConnected = false;
-      notifyListeners();
-    }
-  }
-  
-  void _updateNearbyDevices() {
-    _nearbyDevices = _controller?.nearbyDevices.value ?? [];
-    notifyListeners();
-  }
-  
-  // Start scanning for nearby devices
-  Future<void> startScanning() async {
-    if (_controller == null) {
-      await initialize();
-    }
-    
-    try {
-      _isScanning = true;
-      _error = null;
-      notifyListeners();
-      
-      await _controller!.startDiscovery();
-      
-    } catch (e) {
-      _error = e.toString();
-      _isScanning = false;
-      notifyListeners();
-    }
-  }
-  
-  // Stop scanning
-  Future<void> stopScanning() async {
-    if (_controller != null) {
-      await _controller!.stopDiscovery();
-    }
-    _isScanning = false;
-    notifyListeners();
-  }
-  
-  // Clear discovered devices
-  void clearDevices() {
-    _controller?.clearDevices();
-  }
-  
-  @override
-  void dispose() {
-    _deviceSubscription?.cancel();
-    _controller?.dispose();
-    super.dispose();
-  }
 }

@@ -1,0 +1,97 @@
+> Task :gradle:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle:compileKotlin UP-TO-DATE
+> Task :gradle:compileJava NO-SOURCE
+> Task :gradle:compileGroovy NO-SOURCE
+> Task :gradle:pluginDescriptors UP-TO-DATE
+> Task :gradle:processResources UP-TO-DATE
+> Task :gradle:classes UP-TO-DATE
+> Task :gradle:jar UP-TO-DATE
+> Task :clean
+> Task :app:externalNativeBuildCleanDebug
+> Task :app:externalNativeBuildCleanProfile
+> Task :app:externalNativeBuildCleanRelease
+> Task :app:clean UP-TO-DATE
+> Task :device_info_plus:clean UP-TO-DATE
+> Task :flutter_blue_plus_android:clean UP-TO-DATE
+> Task :flutter_image_compress_common:clean UP-TO-DATE
+> Task :flutter_plugin_android_lifecycle:clean UP-TO-DATE
+> Task :image_picker_android:clean UP-TO-DATE
+> Task :network_info_plus:clean UP-TO-DATE
+> Task :permission_handler_android:clean UP-TO-DATE
+> Task :shared_preferences_android:clean UP-TO-DATE
+> Task :sqflite_android:clean UP-TO-DATE
+> Task :app:DebugMinSdkCheck
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:compileFlutterBuildDebug
+> Task :app:packJniLibsflutterBuildDebug
+> Task :device_info_plus:preBuild UP-TO-DATE
+> Task :device_info_plus:preDebugBuild UP-TO-DATE
+> Task :flutter_blue_plus_android:preBuild UP-TO-DATE
+> Task :flutter_blue_plus_android:preDebugBuild UP-TO-DATE
+> Task :device_info_plus:writeDebugAarMetadata
+> Task :flutter_image_compress_common:preBuild UP-TO-DATE
+> Task :flutter_image_compress_common:preDebugBuild UP-TO-DATE
+> Task :flutter_blue_plus_android:writeDebugAarMetadata
+> Task :flutter_plugin_android_lifecycle:preBuild UP-TO-DATE
+> Task :flutter_plugin_android_lifecycle:preDebugBuild UP-TO-DATE
+> Task :flutter_image_compress_common:writeDebugAarMetadata
+> Task :image_picker_android:preBuild UP-TO-DATE
+> Task :image_picker_android:preDebugBuild UP-TO-DATE
+> Task :flutter_plugin_android_lifecycle:writeDebugAarMetadata
+> Task :network_info_plus:preBuild UP-TO-DATE
+> Task :network_info_plus:preDebugBuild UP-TO-DATE
+> Task :image_picker_android:writeDebugAarMetadata
+> Task :permission_handler_android:preBuild UP-TO-DATE
+> Task :permission_handler_android:preDebugBuild UP-TO-DATE
+> Task :network_info_plus:writeDebugAarMetadata
+> Task :shared_preferences_android:preBuild UP-TO-DATE
+> Task :permission_handler_android:writeDebugAarMetadata
+> Task :shared_preferences_android:preDebugBuild UP-TO-DATE
+> Task :sqflite_android:preBuild UP-TO-DATE
+> Task :sqflite_android:preDebugBuild UP-TO-DATE
+> Task :shared_preferences_android:writeDebugAarMetadata
+> Task :app:cleanMergeDebugAssets UP-TO-DATE
+> Task :sqflite_android:writeDebugAarMetadata
+> Task :app:mergeDebugShaders
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :device_info_plus:mergeDebugShaders
+> Task :device_info_plus:compileDebugShaders NO-SOURCE
+> Task :device_info_plus:generateDebugAssets UP-TO-DATE
+> Task :device_info_plus:mergeDebugAssets
+> Task :flutter_blue_plus_android:mergeDebugShaders
+> Task :flutter_blue_plus_android:compileDebugShaders NO-SOURCE
+> Task :flutter_blue_plus_android:generateDebugAssets UP-TO-DATE
+> Task :app:checkDebugAarMetadata
+> Task :flutter_blue_plus_android:mergeDebugAssets
+> Task :flutter_image_compress_common:mergeDebugShaders
+> Task :flutter_image_compress_common:compileDebugShaders NO-SOURCE
+> Task :flutter_image_compress_common:generateDebugAssets UP-TO-DATE
+> Task :flutter_image_compress_common:mergeDebugAssets
+> Task :flutter_plugin_android_lifecycle:mergeDebugShaders
+> Task :flutter_plugin_android_lifecycle:compileDebugShaders NO-SOURCE
+> Task :flutter_plugin_android_lifecycle:generateDebugAssets UP-TO-DATE
+> Task :flutter_plugin_android_lifecycle:mergeDebugAssets
+> Task :image_picker_android:mergeDebugShaders
+> Task :image_picker_android:compileDebugShaders NO-SOURCE
+> Task :image_picker_android:generateDebugAssets UP-TO-DATE
+> Task :image_picker_android:mergeDebugAssets
+> Task :network_info_plus:mergeDebugShaders
+> Task :network_info_plus:compileDebugShaders NO-SOURCE
+> Task :network_info_plus:generateDebugAssets UP-TO-DATE
+> Task :network_info_plus:mergeDebugAssets
+> Task :permission_handler_android:mergeDebugShaders
+> Task :permission_handler_android:compileDebugShaders NO-SOURCE
+> Task :permission_handler_android:generateDebugAssets UP-TO-DATE
+> Task :permission_handler_android:mergeDebugAssets
+> Task :shared_preferences_android:mergeDebugShaders
+> Task :shared_preferences_android:compileDebugShaders NO-SOURCE
+> Task :shared_preferences_android:generateDebugAssets UP-TO-DATE
+> Task :shared_preferences_android:mergeDebugAssets
+> Task :sqflite_android:mergeDebugShaders
+> Task :sqflite_android:compileDebugShaders NO-SOURCE
+> Task :sqflite_android:generateDebugAssets UP-TO-DATE
+> Task :sqflite_android:mergeDebugAssets

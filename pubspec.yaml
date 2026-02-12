@@ -18,15 +18,17 @@ dependencies:
   flutter_launcher_icons: ^0.13.1
   provider: ^6.1.5+1
   sqflite: ^2.3.0 
-  network_info_plus: ^7.0.0
   http: ^1.6.0
   image_picker: ^1.2.1
   crypto: ^3.0.3
   flutter_blue_plus: ^2.1.0
   permission_handler: ^12.0.1
   flutter_image_compress: ^2.4.0
-  uuid : ^3.0.7
-  multicast_dns: ^0.3.3
+  uuid : ^4.0.0
+  device_info_plus: ^12.3.0
+  network_info_plus: ^7.0.0
+
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

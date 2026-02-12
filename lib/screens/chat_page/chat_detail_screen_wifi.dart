@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:oreon/const/const.dart';
+import 'package:oreon/services/WIFI/lan_module/lan_module.dart';
 import 'package:provider/provider.dart';
 import 'package:oreon/models/chat_model.dart';
-import 'package:oreon/services/WIFI_Direct/wdirect_service.dart';
 import 'package:oreon/providers/providers.dart';
 import 'package:oreon/main.dart';
 
@@ -21,17 +20,22 @@ class ChatDetailScreenWifi extends StatefulWidget {
 }
 
 class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
-  with TickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
 
-  late WiFiDirectController _wifiController;
   bool _isTyping = false;
+  bool _isInitialized = false;
   Timer? _typingTimer;
   StreamSubscription? _messageStreamSubscription;
+  StreamSubscription? _deviceStreamSubscription;
   String? _myDeviceId;
   String? _myDeviceName;
+  LanDevice? _targetDevice;
+  String? _targetDeviceIp;
+  final List<LanDevice> _discoveredDevices = [];
+  final LanController _wifiController = LanController.instance;
 
   // Animation for typing indicator
   late AnimationController _typingAnimController;
@@ -40,7 +44,6 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
   @override
   void initState() {
     super.initState();
-    _wifiController = WiFiDirectController();
     _setupTypingAnimation();
     _initializeWiFiDirect();
 
@@ -54,10 +57,13 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
     try {
       debugPrint('🚀 Initializing WiFi Direct for chat: ${widget.chat.id}');
       
-      await _wifiController.initialize();
-      await _wifiController.startMessaging();
+      // Start the LAN controller and wait for full initialization
+      await _wifiController.start();
       
-      // Get my actual device ID and name from WiFi Direct controller
+      // Give the controller a moment to discover devices
+      await Future.delayed(const Duration(milliseconds: 1000));
+      
+      // Get my actual device ID and name
       _myDeviceName = prefs.getString("name") ?? "Unknown User";
       
       _myDeviceId = 'Device_${prefs.getString("username") ?? "User"}_${prefs.getString("user_uuid") ?? "unknown"}';
@@ -66,13 +72,19 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
       debugPrint('   Device Name: $_myDeviceName');
       debugPrint('   Device ID: $_myDeviceId');
       debugPrint('   Chat ID: ${widget.chat.id}');
+      debugPrint('   Local IP: ${_wifiController.localIpAddress}');
+      debugPrint('   Server Port: ${_wifiController.port}');
       
-      // Subscribe to incoming messages
+      // Subscribe to incoming messages AFTER controller is fully ready
       debugPrint('👂 Setting up message stream listener...');
-      _messageStreamSubscription = _wifiController.messageStream.listen(
-        (chatMessage) {
+      _messageStreamSubscription = _wifiController.incomingMessages.listen(
+        (lanMessage) {
           debugPrint('🔔 Message stream event triggered');
-          _handleIncomingMessage(chatMessage);
+          debugPrint('   Message ID: ${lanMessage.id}');
+          debugPrint('   From: ${lanMessage.senderName}');
+          debugPrint('   Content: ${lanMessage.content}');
+          debugPrint('   Sender IP: ${lanMessage.senderIp}');
+          _handleIncomingMessage(lanMessage);
         },
         onError: (error) {
           debugPrint('❌ Message stream error: $error');
@@ -82,7 +94,52 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
         },
       );
       
-      debugPrint('✅ Message stream listener attached');
+      // Subscribe to device discovery to track target device
+      debugPrint('👁️ Setting up device discovery listener...');
+      _deviceStreamSubscription = _wifiController.discoveredDevices.listen(
+        (device) {
+          debugPrint('📍 Device discovered: ${device.name} at ${device.ipAddress}');
+          debugPrint('   Device ID: ${device.id}');
+          debugPrint('   Device Port: ${device.port}');
+          debugPrint('   Contact we seek: ${widget.chat.contactName}');
+          
+          // Add to discovered devices list
+          if (!_discoveredDevices.any((d) => d.id == device.id)) {
+            setState(() {
+              _discoveredDevices.add(device);
+            });
+            debugPrint('✅ Added device to discovered list');
+          }
+          
+          // Auto-select first discovered device as target (broadcast model)
+          if (_targetDevice == null) {
+            setState(() {
+              _targetDevice = device;
+              _targetDeviceIp = device.ipAddress;
+            });
+            debugPrint('✅ Auto-selected first device as target');
+          }
+          
+          // Also try to match by contact name
+          if (device.name.toLowerCase().contains(widget.chat.contactName.toLowerCase()) || 
+              device.name == widget.chat.contactName) {
+            setState(() {
+              _targetDevice = device;
+              _targetDeviceIp = device.ipAddress;
+            });
+            debugPrint('✅ Target device matched by name');
+          }
+        },
+        onError: (error) {
+          debugPrint('❌ Device discovery error: $error');
+        },
+      );
+      
+      debugPrint('✅ Message stream listener and device discovery attached');
+      
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
       
     } catch (e) {
       debugPrint('❌ WiFi Direct initialization failed: $e');
@@ -92,62 +149,75 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
             content: Text('Failed to initialize WiFi Direct: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _initializeWiFiDirect,
+            ),
           ),
         );
       }
     }
   }
 
-  void _handleIncomingMessage(ChatMessage chatMessage) {
-    debugPrint('📨 Incoming message received:');
-    debugPrint('   From: ${chatMessage.sender}');
-    debugPrint('   Text: ${chatMessage.text}');
-    debugPrint('   ChatId: ${chatMessage.chatId}');
-    debugPrint('   Message ID: ${chatMessage.id}');
+  void _handleIncomingMessage(LanMessage lanMessage) {
+    debugPrint('📨 Incoming LAN message received:');
+    debugPrint('   From: ${lanMessage.senderName}');
+    debugPrint('   Content: ${lanMessage.content}');
+    debugPrint('   Sender IP: ${lanMessage.senderIp}');
     debugPrint('   My Name: $_myDeviceName');
     debugPrint('   My Device ID: $_myDeviceId');
-    debugPrint('   Expected Chat ID: ${widget.chat.id}');
     
-    // Check if this message is for our chat
-    if (chatMessage.chatId != widget.chat.id) {
-      debugPrint('⏭️ Message is for different chat (${chatMessage.chatId} != ${widget.chat.id}), ignoring');
-      return;
-    }
-    
-    // Skip our own messages (already added by provider)
-    if (chatMessage.sender == _myDeviceName) {
+    // Skip our own messages (strict check)
+    if (lanMessage.senderName == _myDeviceName) {
       debugPrint('⏭️ Skipping own message (sender matches: $_myDeviceName)');
       return;
     }
     
     debugPrint('✅ Message passed all filters, adding to provider');
     
+    // Store sender IP for future replies
+    if (lanMessage.senderIp != null && lanMessage.senderIp != '0.0.0.0') {
+      setState(() {
+        _targetDeviceIp = lanMessage.senderIp;
+        // Update target device with sender info if we don't have one
+        if (_targetDevice == null) {
+          _targetDevice = LanDevice(
+            id: lanMessage.senderName,
+            name: lanMessage.senderName,
+            ipAddress: lanMessage.senderIp!,
+            port: _wifiController.port,
+          );
+        }
+      });
+      debugPrint('💾 Stored sender IP: $_targetDeviceIp');
+    }
+    
     if (mounted) {
       try {
-        // Get current messages before adding
         final messageProvider = context.read<MessageProvider>();
         final existingMessages = messageProvider.getMessagesForChat(widget.chat.id);
         debugPrint('   Existing messages in chat: ${existingMessages.length}');
         
         // Check if message already exists
-        final isDuplicate = existingMessages.any((m) => m.id == chatMessage.id);
+        final isDuplicate = existingMessages.any((m) => m.id == lanMessage.id);
         
         if (isDuplicate) {
-          debugPrint('⏭️ Message already exists (ID: ${chatMessage.id}), skipping duplicate');
+          debugPrint('⏭️ Message already exists (ID: ${lanMessage.id}), skipping duplicate');
           return;
         }
         
-        debugPrint('📝 Creating Message object from ChatMessage');
-        debugPrint('   ID: ${chatMessage.id}');
-        debugPrint('   Text: ${chatMessage.text}');
-        debugPrint('   Sender: ${chatMessage.sender}');
+        debugPrint('📝 Creating Message object from LanMessage');
+        debugPrint('   ID: ${lanMessage.id}');
+        debugPrint('   Text: ${lanMessage.content}');
+        debugPrint('   Sender: ${lanMessage.senderName}');
         
         // Add message to provider
         messageProvider.addMessage(
           chatId: widget.chat.id,
-          text: chatMessage.text,
+          text: lanMessage.content,
           isFromMe: false,
-          messageId: chatMessage.id,
+          messageId: lanMessage.id,
+          timestamp: lanMessage.timestamp,
         );
         
         debugPrint('✅ Message added to provider successfully');
@@ -155,7 +225,6 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
         // Verify message was added
         final updatedMessages = messageProvider.getMessagesForChat(widget.chat.id);
         debugPrint('   Messages after add: ${updatedMessages.length}');
-        debugPrint('   Last message text: ${updatedMessages.isNotEmpty ? updatedMessages.last.text : "none"}');
         
         // Scroll to bottom
         _scrollToBottom();
@@ -175,9 +244,11 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
     _scrollController.dispose();
     _messageFocusNode.dispose();
     _messageStreamSubscription?.cancel();
+    _deviceStreamSubscription?.cancel();
     _typingTimer?.cancel();
     _typingAnimController.dispose();
-    _wifiController.stopMessaging();
+    _wifiController.stop();
+    _wifiController.dispose();
     super.dispose();
   }
 
@@ -203,8 +274,23 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
       return;
     }
 
+    if (!_isInitialized) {
+      debugPrint('⚠️ WiFi not initialized, cannot send message');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('WiFi Direct not ready, please wait...'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     debugPrint('📤 Send message triggered');
     debugPrint('   Text: $text');
+    debugPrint('   Target Device: ${_targetDevice?.name}');
+    debugPrint('   Target IP: ${_targetDeviceIp}');
+    debugPrint('   Discovered Devices: ${_discoveredDevices.length}');
 
     final messageProvider = context.read<MessageProvider>();
     final messageId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -226,44 +312,47 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
 
     debugPrint('✅ Message added to provider');
 
-    // Create a ChatMessage object to send via WiFi Direct
-    final chatMessage = ChatMessage(
-      appIdentifier: ConstApp().appIdentifier(),
-      id: messageId,
-      text: text,
-      sender: _myDeviceName ?? "Unknown User",
-      chatId: widget.chat.id,
-      timestamp: DateTime.now(),
-      type: 'message',
-    );
-
     // Send via WiFi Direct
-    _sendMessageViaWiFiDirect(chatMessage);
+    _sendMessageViaWiFiDirect(text);
   }
 
-  Future<void> _sendMessageViaWiFiDirect(ChatMessage chatMessage) async {
+  Future<void> _sendMessageViaWiFiDirect(String messageText) async {
     try {
-      debugPrint('📡 Broadcasting message via WiFi Direct');
-      debugPrint('   ID: ${chatMessage.id}');
-      debugPrint('   Text: ${chatMessage.text}');
-      debugPrint('   Sender: ${chatMessage.sender}');
-      debugPrint('   ChatId: ${chatMessage.chatId}');
-      debugPrint('   Timestamp: ${chatMessage.timestamp}');
+      debugPrint('🔍 Checking target device availability...');
+      debugPrint('   Target Device: ${_targetDevice?.name}');
+      debugPrint('   Target IP: ${_targetDeviceIp}');
+      debugPrint('   Discovered Devices Count: ${_discoveredDevices.length}');
 
-      await _wifiController.sendMessage(chatMessage);
+      // If no target device, try to use first discovered device
+      if (_targetDevice == null) {
+        debugPrint('⚠️ No target device selected yet');
+        
+        if (_discoveredDevices.isEmpty) {
+          debugPrint('❌ No devices discovered');
+          throw Exception(
+            'No devices discovered yet. Make sure the other device is online and has the app running.'
+          );
+        }
 
-      debugPrint('✅ Message broadcast successfully');
-
-      // Update message status in provider
-      if (mounted) {
-        final messageProvider = context.read<MessageProvider>();
-        // Optionally update the message status to 'sent'
-        // This depends on your MessageProvider implementation
+        // Use first discovered device
+        _targetDevice = _discoveredDevices.first;
+        _targetDeviceIp = _targetDevice!.ipAddress;
+        debugPrint('✅ Using first discovered device: ${_targetDevice!.name}');
       }
+
+      debugPrint('📡 Broadcasting message via WiFi Direct');
+      debugPrint('   Text: $messageText');
+      debugPrint('   Target: ${_targetDevice!.name}');
+      debugPrint('   Target IP: ${_targetDevice!.ipAddress}');
+      debugPrint('   Target Port: ${_targetDevice!.port}');
+      debugPrint('   Sender: $_myDeviceName');
+
+      // Send message using LanController API
+      _wifiController.sendMessage(_targetDevice!, messageText);
+      debugPrint('✅ Message sent successfully');
       
     } catch (e) {
       debugPrint('❌ Error sending message: $e');
-      debugPrint('   Stack: $e');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -273,7 +362,7 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
               label: 'Retry',
-              onPressed: () => _sendMessageViaWiFiDirect(chatMessage),
+              onPressed: () => _sendMessageViaWiFiDirect(messageText),
             ),
           ),
         );
@@ -341,10 +430,47 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
       appBar: _buildAppBar(),
       body: Column(
         children: [
+          if (_discoveredDevices.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.teal.withValues(alpha: 0.1),
+              child: Row(
+                children: [
+                  const Icon(Icons.devices, color: Colors.tealAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Found ${_discoveredDevices.length} device(s) • Target: ${_targetDevice?.name ?? "None"}',
+                      style: const TextStyle(color: Colors.tealAccent, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_discoveredDevices.length > 1)
+                    DropdownButton<LanDevice>(
+                      value: _targetDevice,
+                      items: _discoveredDevices.map((device) {
+                        return DropdownMenuItem<LanDevice>(
+                          value: device,
+                          child: Text(device.name),
+                        );
+                      }).toList(),
+                      onChanged: (device) {
+                        if (device != null) {
+                          setState(() {
+                            _targetDevice = device;
+                            _targetDeviceIp = device.ipAddress;
+                          });
+                          debugPrint('🎯 Selected device: ${device.name}');
+                        }
+                      },
+                      underline: const SizedBox(),
+                    ),
+                ],
+              ),
+            ),
           Expanded(
             child: Stack(
               children: [
-                const RepaintBoundary(child: _StaticBackgroundGlow()),
                 _buildMessageList(),
               ],
             ),
@@ -366,87 +492,25 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
       ),
       title: Row(
         children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.teal.withValues(alpha: 0.3),
-                backgroundImage: widget.chat.imageBytes != null
-                    ? MemoryImage(widget.chat.imageBytes!)
-                    : null,
-                child: widget.chat.imageBytes == null
-                    ? Text(
-                      widget.chat.avatarText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                    : null,
-              ),
-              ValueListenableBuilder<bool>(
-                valueListenable: _wifiController.isOnline,
-                builder: (context, isOnline, child) {
-                  return isOnline
-                      ? Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: Colors.greenAccent,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFF0D0F14),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink();
-                },
-              ),
-            ],
+          CircleAvatar(
+            child: Text(widget.chat.avatarText),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(widget.chat.contactName, style: const TextStyle(color: Colors.white)),
                 Text(
-                  widget.chat.contactName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
+                  _isInitialized
+                      ? (_targetDevice != null ? 'Connected' : 'Searching devices...')
+                      : 'Initializing...',
+                  style: TextStyle(
+                    color: _isInitialized
+                        ? (_targetDevice != null ? Colors.greenAccent : Colors.orange)
+                        : Colors.orange,
+                    fontSize: 12,
                   ),
-                ),
-                const SizedBox(height: 2),
-                ValueListenableBuilder<bool>(
-                  valueListenable: _wifiController.isOnline,
-                  builder: (context, isOnline, child) {
-                    return Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: _getConnectionColor(),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          isOnline ? _getConnectionLabel() : 'Offline',
-                          style: TextStyle(
-                            color: _getConnectionColor().withValues(alpha: 0.9),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
                 ),
               ],
             ),
@@ -461,17 +525,11 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
               ),
               child: Text(
-                '${messages.length} msgs',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
+                '${messages.length}',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
             );
           },
@@ -494,26 +552,11 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.chat_bubble_outline,
-                  size: 64,
-                  color: Colors.white.withValues(alpha: 0.2),
-                ),
+                Icon(Icons.message_outlined, size: 48, color: Colors.white.withValues(alpha: 0.2)),
                 const SizedBox(height: 16),
                 Text(
                   'No messages yet',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Send a message to start the conversation',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
                 ),
               ],
             ),
@@ -551,11 +594,7 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               _formatTimestampDivider(timestamp),
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ),
           Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.1))),
@@ -586,38 +625,17 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
             child: GestureDetector(
               onLongPress: () => _showMessageOptions(message),
               child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.75,
-                ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: message.isFromMe
-                      ? Colors.tealAccent.withValues(alpha: 0.2)
-                      : Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(20),
-                    topRight: const Radius.circular(20),
-                    bottomLeft:
-                        Radius.circular(message.isFromMe ? 20 : 4),
-                    bottomRight:
-                        Radius.circular(message.isFromMe ? 4 : 20),
-                  ),
-                  border: Border.all(
-                    color: message.isFromMe
-                        ? Colors.tealAccent.withValues(alpha: 0.3)
-                        : Colors.white.withValues(alpha: 0.08),
-                  ),
+                  color: message.isFromMe ? Colors.tealAccent.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: message.isFromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
                     Text(
                       message.text,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        height: 1.4,
-                      ),
+                      style: const TextStyle(color: Colors.white),
                     ),
                     const SizedBox(height: 4),
                     Row(
@@ -625,10 +643,7 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
                       children: [
                         Text(
                           _formatMessageTime(message.timestamp),
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
-                            fontSize: 11,
-                          ),
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11),
                         ),
                         if (message.isFromMe) ...[
                           const SizedBox(width: 4),
@@ -706,10 +721,10 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
                 (index) => Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
                   child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: Colors.tealAccent.withValues(alpha: 0.8),
+                    width: 4,
+                    height: 4,
+                    decoration: const BoxDecoration(
+                      color: Colors.tealAccent,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -736,64 +751,40 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
           children: [
             IconButton(
               icon: Icon(Icons.add_circle_outline, color: Colors.tealAccent.withValues(alpha: 0.8)),
-              onPressed: () {
-                _showAttachmentOptions();
-              },
+              onPressed: () => _showAttachmentOptions(),
             ),
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                ),
-                child: TextField(
-                  controller: _messageController,
-                  focusNode: _messageFocusNode,
-                  style: const TextStyle(color: Colors.white),
-                  maxLines: null,
-                  textInputAction: TextInputAction.newline,
-                  decoration: InputDecoration(
-                    hintText: 'Type a message...',
-                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
+              child: TextField(
+                controller: _messageController,
+                focusNode: _messageFocusNode,
+                decoration: InputDecoration(
+                  hintText: 'Type a message...',
+                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                   ),
-                  onChanged: (text) {
-                    if (text.isNotEmpty) {
-                      _sendTypingIndicator();
-                    } else {
-                      _stopTypingIndicator();
-                    }
-                  },
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),
+                style: const TextStyle(color: Colors.white),
+                onChanged: (value) {
+                  if (value.isNotEmpty) {
+                    _sendTypingIndicator();
+                  }
+                },
               ),
             ),
             const SizedBox(width: 8),
             GestureDetector(
               onTap: _sendMessage,
               child: Container(
-                width: 48,
-                height: 48,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.tealAccent.withValues(alpha: 0.9),
+                  color: Colors.tealAccent.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.tealAccent.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      spreadRadius: 2,
-                    ),
-                  ],
                 ),
-                child: const Icon(
-                  Icons.send_rounded,
-                  color: Colors.black87,
-                  size: 22,
-                ),
+                child: const Icon(Icons.send, color: Colors.tealAccent, size: 20),
               ),
             ),
           ],
@@ -816,30 +807,10 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildAttachmentOption(
-              Icons.photo_library,
-              'Photo',
-              Colors.purpleAccent,
-              () {},
-            ),
-            _buildAttachmentOption(
-              Icons.video_library,
-              'Video',
-              Colors.redAccent,
-              () {},
-            ),
-            _buildAttachmentOption(
-              Icons.insert_drive_file,
-              'File',
-              Colors.blueAccent,
-              () {},
-            ),
-            _buildAttachmentOption(
-              Icons.location_on,
-              'Location',
-              Colors.greenAccent,
-              () {},
-            ),
+            _buildAttachmentOption(Icons.image, 'Photo', Colors.blueAccent, () {}),
+            _buildAttachmentOption(Icons.videocam, 'Video', Colors.redAccent, () {}),
+            _buildAttachmentOption(Icons.music_note, 'Audio', Colors.purpleAccent, () {}),
+            _buildAttachmentOption(Icons.insert_drive_file, 'File', Colors.orangeAccent, () {}),
           ],
         ),
       ),
@@ -887,10 +858,9 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.copy, color: Colors.white70),
+              leading: const Icon(Icons.copy, color: Colors.tealAccent),
               title: const Text('Copy', style: TextStyle(color: Colors.white)),
               onTap: () {
-                Clipboard.setData(ClipboardData(text: message.text));
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Message copied')),
@@ -900,11 +870,10 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
             if (message.isFromMe)
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.redAccent),
-                title: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                title: const Text('Delete', style: TextStyle(color: Colors.white)),
                 onTap: () {
-                  final messageProvider = context.read<MessageProvider>();
-                  messageProvider.deleteMessage(widget.chat.id, message.id);
                   Navigator.pop(context);
+                  context.read<MessageProvider>().deleteMessage(widget.chat.id, message.id);
                 },
               ),
           ],
@@ -919,22 +888,36 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1D26),
         title: const Text('Chat Debug Info', style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Chat ID: ${widget.chat.id}', style: const TextStyle(color: Colors.white70)),
-            Text('Contact: ${widget.chat.contactName}', style: const TextStyle(color: Colors.white70)),
-            Text('My Name: $_myDeviceName', style: const TextStyle(color: Colors.white70)),
-            Text('My Device: $_myDeviceId', style: const TextStyle(color: Colors.white70)),
-            Consumer<MessageProvider>(
-              builder: (context, messageProvider, child) {
-                final messages = messageProvider.getMessagesForChat(widget.chat.id);
-                return Text('Messages: ${messages.length}', style: const TextStyle(color: Colors.white70));
-              },
-            ),
-            Text('Connection: ${_getConnectionLabel()}', style: const TextStyle(color: Colors.white70)),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Chat ID: ${widget.chat.id}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Text('Contact: ${widget.chat.contactName}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              const SizedBox(height: 8),
+              Text('My Device: $_myDeviceName', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Text('My ID: $_myDeviceId', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              const SizedBox(height: 8),
+              Text('Discovered Devices: ${_discoveredDevices.length}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              if (_discoveredDevices.isNotEmpty)
+                ..._discoveredDevices.map((d) => Padding(
+                  padding: const EdgeInsets.only(left: 16, top: 4),
+                  child: Text('• ${d.name} (${d.ipAddress})', style: const TextStyle(color: Colors.tealAccent, fontSize: 11)),
+                )),
+              const SizedBox(height: 8),
+              Text('Target Device: ${_targetDevice?.name ?? "None"}', style: TextStyle(color: _targetDevice != null ? Colors.greenAccent : Colors.orange, fontSize: 12)),
+              Text('Target IP: ${_targetDeviceIp ?? "Not set"}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              const SizedBox(height: 8),
+              Text('Status: ${_isInitialized ? "Ready" : "Initializing..."}', style: TextStyle(color: _isInitialized ? Colors.greenAccent : Colors.orange, fontSize: 12)),
+              Consumer<MessageProvider>(
+                builder: (context, messageProvider, _) {
+                  final messages = messageProvider.getMessagesForChat(widget.chat.id);
+                  return Text('Messages: ${messages.length}', style: const TextStyle(color: Colors.white70, fontSize: 12));
+                },
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -942,32 +925,6 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
             child: const Text('Close'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-
-class _StaticBackgroundGlow extends StatelessWidget {
-  const _StaticBackgroundGlow();
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: -150,
-      right: -150,
-      child: Container(
-        width: 500,
-        height: 500,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              Colors.teal.withValues(alpha: 0.08),
-              Colors.transparent,
-            ],
-          ),
-        ),
       ),
     );
   }
