@@ -738,149 +738,149 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
   }
 
   Widget _buildMessageInput() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0F14),
-        border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-        ),
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    decoration: BoxDecoration(
+      color: const Color(0xFF0D0F14),
+      border: Border(
+        top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            IconButton(
-              icon: Icon(Icons.add_circle_outline, color: Colors.tealAccent.withValues(alpha: 0.8)),
-              onPressed: () => _showAttachmentOptions(),
-            ),
-            Expanded(
-              child: TextField(
-                controller: _messageController,
-                focusNode: _messageFocusNode,
-                decoration: InputDecoration(
-                  hintText: 'Type a message...',
-                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    ),
+    child: SafeArea(
+      child: Row(
+        children: [
+          IconButton(
+            icon: Icon(Icons.add_circle_outline, color: Colors.tealAccent.withValues(alpha: 0.8)),
+            onPressed: () => _showAttachmentOptions(),
+          ),
+          Expanded(
+            child: TextField(
+              controller: _messageController,
+              focusNode: _messageFocusNode,
+              decoration: InputDecoration(
+                hintText: 'Type a message...',
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                 ),
-                style: const TextStyle(color: Colors.white),
-                onChanged: (value) {
-                  if (value.isNotEmpty) {
-                    _sendTypingIndicator();
-                  }
-                },
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _sendMessage,
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.tealAccent.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.send, color: Colors.tealAccent, size: 20),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAttachmentOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1D26),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildAttachmentOption(Icons.image, 'Photo', Colors.blueAccent, () {}),
-            _buildAttachmentOption(Icons.videocam, 'Video', Colors.redAccent, () {}),
-            _buildAttachmentOption(Icons.music_note, 'Audio', Colors.purpleAccent, () {}),
-            _buildAttachmentOption(Icons.insert_drive_file, 'File', Colors.orangeAccent, () {}),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAttachmentOption(
-      IconData icon, String label, Color color, VoidCallback onTap) {
-    return ListTile(
-      leading: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.2),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: color),
-      ),
-      title: Text(
-        label,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-      ),
-      onTap: () {
-        Navigator.pop(context);
-        onTap();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$label sharing coming soon')),
-        );
-      },
-    );
-  }
-
-  void _showMessageOptions(Message message) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1D26),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.copy, color: Colors.tealAccent),
-              title: const Text('Copy', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Message copied')),
-                );
+              style: const TextStyle(color: Colors.white),
+              onChanged: (value) {
+                if (value.isNotEmpty) {
+                  _sendTypingIndicator();
+                }
               },
             ),
-            if (message.isFromMe)
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.redAccent),
-                title: const Text('Delete', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(context);
-                  context.read<MessageProvider>().deleteMessage(widget.chat.id, message.id);
-                },
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _sendMessage,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.tealAccent.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
               ),
-          ],
-        ),
+              child: const Icon(Icons.send, color: Colors.tealAccent, size: 20),
+            ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+  void _showAttachmentOptions() {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) => Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1D26),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildAttachmentOption(Icons.image, 'Photo', Colors.blueAccent, () {}),
+          _buildAttachmentOption(Icons.videocam, 'Video', Colors.redAccent, () {}),
+          _buildAttachmentOption(Icons.music_note, 'Audio', Colors.purpleAccent, () {}),
+          _buildAttachmentOption(Icons.insert_drive_file, 'File', Colors.orangeAccent, () {}),
+        ],
+      ),
+    ),
+  );
+}
+
+  Widget _buildAttachmentOption(
+    IconData icon, String label, Color color, VoidCallback onTap) {
+  return ListTile(
+    leading: Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: color),
+    ),
+    title: Text(
+      label,
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+    ),
+    onTap: () {
+      Navigator.pop(context);
+      onTap();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$label sharing coming soon')),
+      );
+    },
+  );
+}
+
+  void _showMessageOptions(Message message) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) => Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1D26),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.copy, color: Colors.tealAccent),
+            title: const Text('Copy', style: TextStyle(color: Colors.white)),
+            onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Message copied')),
+              );
+            },
+          ),
+          if (message.isFromMe)
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.redAccent),
+              title: const Text('Delete', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                context.read<MessageProvider>().deleteMessage(widget.chat.id, message.id);
+              },
+            ),
+        ],
+      ),
+    ),
+  );
+}
 
   void _showOptionsMenu() {
     showDialog(
