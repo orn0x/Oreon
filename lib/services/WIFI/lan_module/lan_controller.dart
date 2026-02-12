@@ -7,11 +7,12 @@
 import 'dart:async';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:network_info_plus/network_info_plus.dart';
-import 'models/lan_device.dart';
-import 'models/lan_message.dart';
-import 'discovery/mdns_discovery.dart';
-import 'connection/tcp_server.dart';
-import 'connection/tcp_client.dart';
+import 'package:oreon/services/WIFI/lan_module/models/lan_device.dart';
+import 'package:oreon/services/WIFI/lan_module/models/lan_message.dart';
+import 'package:oreon/services/WIFI/lan_module/discovery/mdns_discovery.dart';
+import 'package:oreon/services/WIFI/lan_module/connection/tcp_server.dart';
+import 'package:oreon/services/WIFI/lan_module/connection/tcp_client.dart';
+
 
 /// Main LAN Chat Controller
 ///
@@ -42,6 +43,26 @@ import 'connection/tcp_client.dart';
 /// await controller.stop();
 /// ```
 class LanController {
+  /// Singleton instance (optional)
+  static LanController? _instance;
+  
+  /// Get or create the singleton instance
+  factory LanController() {
+    _instance ??= LanController._internal();
+    return _instance!;
+  }
+  
+  /// Private constructor for singleton
+  LanController._internal() {
+    _port = defaultPort;
+  }
+  
+  /// Get singleton instance directly
+  static LanController get instance {
+    _instance ??= LanController._internal();
+    return _instance!;
+  }
+
   /// Device name of this device
   late String _deviceName;
 
@@ -63,15 +84,6 @@ class LanController {
 
   /// Whether the controller is currently running
   bool _isRunning = false;
-
-  /// Creates a new LAN controller
-  ///
-  /// Optional parameters:
-  /// [port] - TCP port to use (defaults to 7531)
-  LanController({int port = defaultPort}) {
-    _port = port;
-  }
-
   /// Stream of discovered devices on the LAN
   ///
   /// Emits a LanDevice whenever a new device is discovered.
@@ -272,7 +284,7 @@ class LanController {
   /// Throws Exception if network connection is unavailable.
   Future<String> _getLocalIpAddress() async {
     try {
-      final networkInfo = NetworkInfoPlus();
+      final networkInfo = NetworkInfo();
       final wifiIP = await networkInfo.getWifiIP();
 
       if (wifiIP != null && wifiIP.isNotEmpty) {
@@ -346,5 +358,5 @@ class LanController {
 extension _TcpClientInternal on LanTcpClient {
   /// Gets or establishes a connection (exposed for LanController)
   Future<void> getConnection(LanDevice device) =>
-      _getConnection(device).then((_) {});
+      getConnection(device).then((_) {});
 }

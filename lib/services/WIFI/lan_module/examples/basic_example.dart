@@ -4,7 +4,9 @@
 /// for device discovery and messaging.
 
 import 'package:flutter/material.dart';
-import 'package:polygone_app/lan_module/lan_module.dart';
+import 'package:oreon/services/WIFI/lan_module/lan_controller.dart';
+import 'package:oreon/services/WIFI/lan_module/models/lan_device.dart';
+import 'package:oreon/services/WIFI/lan_module/models/lan_message.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -183,7 +185,7 @@ class _ChatExampleState extends State<ChatExample> {
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
                             final message = _messages[index];
-
+                            
                             return ListTile(
                               title: Text(message.senderName),
                               subtitle: Text(message.content),

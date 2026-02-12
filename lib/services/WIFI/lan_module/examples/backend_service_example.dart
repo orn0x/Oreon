@@ -8,7 +8,10 @@
 /// and can be tested independently.
 
 import 'dart:async';
-import 'package:polygone_app/lan_module/lan_module.dart';
+
+import 'package:oreon/services/WIFI/lan_module/lan_controller.dart';
+import 'package:oreon/services/WIFI/lan_module/models/lan_device.dart';
+import 'package:oreon/services/WIFI/lan_module/models/lan_message.dart';
 
 /// Backend service for LAN chat operations
 ///

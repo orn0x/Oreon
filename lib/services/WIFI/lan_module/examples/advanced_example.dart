@@ -7,7 +7,9 @@
 /// - Device connection details
 
 import 'package:flutter/material.dart';
-import 'package:polygone_app/lan_module/lan_module.dart';
+import 'package:oreon/services/WIFI/lan_module/lan_controller.dart';
+import 'package:oreon/services/WIFI/lan_module/models/lan_device.dart';
+import 'package:oreon/services/WIFI/lan_module/models/lan_message.dart';
 
 /// Provider-like class for managing LAN controller state
 class LanControllerProvider extends ChangeNotifier {
