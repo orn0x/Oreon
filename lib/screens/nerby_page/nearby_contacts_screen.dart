@@ -2,86 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:typed_data';
-import 'package:oreon/main.dart';
-import 'package:oreon/screens/chat_page/chat_detail_screen_wifi.dart';
-import 'package:oreon/screens/chat_page/chat_detail_screen_blue.dart';
 import 'package:provider/provider.dart';
 import 'package:oreon/const/const.dart';
 import 'package:oreon/models/chat_model.dart';
 import 'package:oreon/providers/providers.dart';
 import 'package:oreon/services/WIFI/lan_module/lan_controller.dart';
 import 'package:oreon/services/WIFI/lan_module/models/lan_device.dart';
-import 'package:oreon/services/WIFI/lan_module/models/lan_message.dart';
-
-// ============================================================================
-// Device Wrapper Model
-// ============================================================================
-class DeviceWrapper {
-  final String id;
-  final String name;
-  final String appIdentifier;
-  final bool isBluetooth;
-  final bool isFromApp;
-  final Uint8List? imageBytes;
-  final DateTime timestamp;
-  final String ipAddress;
-  final int port;
-
-  DeviceWrapper({
-    required this.id,
-    required this.name,
-    required this.appIdentifier,
-    required this.isBluetooth,
-    required this.isFromApp,
-    this.imageBytes,
-    required this.timestamp,
-    required this.ipAddress,
-    required this.port,
-  });
-
-  factory DeviceWrapper.fromLan(LanDevice device) {
-    return DeviceWrapper(
-      id: device.id,
-      name: device.name,
-      appIdentifier: device.id,
-      isBluetooth: false,
-      isFromApp: true,
-      imageBytes: null,
-      timestamp: DateTime.now(),
-      ipAddress: device.ipAddress,
-      port: device.port,
-    );
-  }
-
-  factory DeviceWrapper.fromWifi(LanDevice device) {
-    return DeviceWrapper(
-      id: device.id,
-      name: device.name,
-      appIdentifier: device.id,
-      isBluetooth: false,
-      isFromApp: true,
-      imageBytes: null,
-      timestamp: DateTime.now(),
-      ipAddress: device.ipAddress,
-      port: device.port,
-    );
-  }
-
-  factory DeviceWrapper.fromBluetooth(Map<String, dynamic> device) {
-    return DeviceWrapper(
-      id: device['id'] ?? 'unknown',
-      name: device['name'] ?? 'Unknown Device',
-      appIdentifier: device['id'] ?? 'unknown',
-      isBluetooth: true,
-      isFromApp: device['isFromApp'] ?? false,
-      imageBytes: device['image'] as Uint8List?,
-      timestamp: DateTime.now(),
-      ipAddress: '0.0.0.0',
-      port: 0,
-    );
-  }
-}
+import 'package:oreon/models/device_wrapper.dart';
 
 // ============================================================================
 // Radar Painter
@@ -493,6 +420,8 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
       }
 
       final chatProvider = context.read<ChatListProvider>();
+      
+      // Create chat with lanController properly attached
       final chat = Chat(
         identifier: device.appIdentifier,
         id: device.id,
@@ -509,10 +438,10 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
             device.name.isNotEmpty ? device.name[0].toUpperCase() : 'U',
         avatarImageBytes: device.imageBytes,
         deviceId: device.id,
+        deviceWrapper: device,
       );
 
       chatProvider.addOrUpdateChat(chat);
-
 
       Navigator.pushNamed(
         context,
@@ -523,6 +452,7 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
       _showSnackBar('Added ${chat.contactName} to chats');
     } catch (e) {
       _showSnackBar('Error adding contact: $e', isError: true);
+      debugPrint('Error adding contact: $e');
     }
   }
 
@@ -608,6 +538,7 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
             SafeArea(
               child: Column(
                 children: [
+                  _buildSearchBar(),
                   _buildStatusCard(_isScanning),
                   Expanded(
                     child: _buildDevicesTabs(),
@@ -616,6 +547,44 @@ class _StableNearbyContactsScreenState extends State<StableNearbyContactsScreen>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: TextField(
+        controller: _searchController,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: 'Search devices...',
+          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+          prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.6)),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: Icon(Icons.clear, color: Colors.white.withValues(alpha: 0.6)),
+                  onPressed: () {
+                    _searchController.clear();
+                    _filterContacts();
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: Colors.white.withValues(alpha: 0.05),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Colors.tealAccent, width: 1.5),
+          ),
         ),
       ),
     );

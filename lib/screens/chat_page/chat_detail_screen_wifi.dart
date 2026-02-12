@@ -63,14 +63,28 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
       // Give the controller a moment to discover devices
       await Future.delayed(const Duration(milliseconds: 1000));
       
+      // Initialize target device from chat's deviceWrapper if available
+      if (widget.chat.deviceWrapper != null) {
+        setState(() {
+          _targetDevice = LanDevice(
+            id: widget.chat.deviceWrapper!.id,
+            name: widget.chat.deviceWrapper!.name,
+            ipAddress: widget.chat.deviceWrapper!.ipAddress,
+            port: widget.chat.deviceWrapper!.port,
+          );
+          _targetDeviceIp = widget.chat.deviceWrapper!.ipAddress;
+        });
+        debugPrint('✅ Target device initialized from chat deviceWrapper');
+        debugPrint('   Device: ${_targetDevice!.name}');
+        debugPrint('   IP: ${_targetDeviceIp}');
+      }
+      
       // Get my actual device ID and name
       _myDeviceName = prefs.getString("name") ?? "Unknown User";
       
       _myDeviceId = 'Device_${prefs.getString("username") ?? "User"}_${prefs.getString("user_uuid") ?? "unknown"}';
       
       debugPrint('✅ WiFi Direct initialized');
-      debugPrint('   Device Name: $_myDeviceName');
-      debugPrint('   Device ID: $_myDeviceId');
       debugPrint('   Chat ID: ${widget.chat.id}');
       debugPrint('   Local IP: ${_wifiController.localIpAddress}');
       debugPrint('   Server Port: ${_wifiController.port}');
@@ -111,13 +125,13 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
             debugPrint('✅ Added device to discovered list');
           }
           
-          // Auto-select first discovered device as target (broadcast model)
+          // Auto-select first discovered device as target (only if not already set from deviceWrapper)
           if (_targetDevice == null) {
             setState(() {
               _targetDevice = device;
               _targetDeviceIp = device.ipAddress;
             });
-            debugPrint('✅ Auto-selected first device as target');
+            debugPrint('✅ Auto-selected first discovered device as target');
           }
           
           // Also try to match by contact name
@@ -175,21 +189,27 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
     
     debugPrint('✅ Message passed all filters, adding to provider');
     
-    // Store sender IP for future replies
-    if (lanMessage.senderIp != null && lanMessage.senderIp != '0.0.0.0') {
+    // Use deviceWrapper IP if available, otherwise use senderIp
+    if (widget.chat.deviceWrapper != null) {
+      final senderIp = widget.chat.deviceWrapper!.ipAddress;
+      if (senderIp.isNotEmpty && senderIp != '0.0.0.0') {
+        setState(() {
+          _targetDeviceIp = senderIp;
+          // Update target device with deviceWrapper info if we don't have one
+          _targetDevice ??= LanDevice(
+            id: widget.chat.deviceWrapper!.id,
+            name: widget.chat.deviceWrapper!.name,
+            ipAddress: widget.chat.deviceWrapper!.ipAddress,
+            port: widget.chat.deviceWrapper!.port,
+          );
+        });
+        debugPrint('💾 Stored sender IP from deviceWrapper: $_targetDeviceIp');
+      }
+    } else if (lanMessage.senderIp != '0.0.0.0') {
       setState(() {
         _targetDeviceIp = lanMessage.senderIp;
-        // Update target device with sender info if we don't have one
-        if (_targetDevice == null) {
-          _targetDevice = LanDevice(
-            id: lanMessage.senderName,
-            name: lanMessage.senderName,
-            ipAddress: lanMessage.senderIp!,
-            port: _wifiController.port,
-          );
-        }
       });
-      debugPrint('💾 Stored sender IP: $_targetDeviceIp');
+      debugPrint('💾 Stored sender IP from message: $_targetDeviceIp');
     }
     
     if (mounted) {
@@ -247,8 +267,7 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
     _deviceStreamSubscription?.cancel();
     _typingTimer?.cancel();
     _typingAnimController.dispose();
-    _wifiController.stop();
-    _wifiController.dispose();
+    // Don't stop the singleton controller - it's shared across screens
     super.dispose();
   }
 
@@ -289,7 +308,7 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
     debugPrint('📤 Send message triggered');
     debugPrint('   Text: $text');
     debugPrint('   Target Device: ${_targetDevice?.name}');
-    debugPrint('   Target IP: ${_targetDeviceIp}');
+    debugPrint('   Target IP: $_targetDeviceIp');
     debugPrint('   Discovered Devices: ${_discoveredDevices.length}');
 
     final messageProvider = context.read<MessageProvider>();
@@ -320,7 +339,7 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
     try {
       debugPrint('🔍 Checking target device availability...');
       debugPrint('   Target Device: ${_targetDevice?.name}');
-      debugPrint('   Target IP: ${_targetDeviceIp}');
+      debugPrint('   Target IP: $_targetDeviceIp');
       debugPrint('   Discovered Devices Count: ${_discoveredDevices.length}');
 
       // If no target device, try to use first discovered device
@@ -397,31 +416,6 @@ class _ChatDetailScreenWifiState extends State<ChatDetailScreenWifi>
     });
   }
 
-  String _getConnectionLabel() {
-    switch (widget.chat.connectionType) {
-      case ConnectionType.bluetooth:
-        return 'Bluetooth';
-      case ConnectionType.wifi:
-        return 'WiFi Direct';
-      case ConnectionType.centralized:
-        return 'Server';
-      default:
-        return 'Online';
-    }
-  }
-
-  Color _getConnectionColor() {
-    switch (widget.chat.connectionType) {
-      case ConnectionType.bluetooth:
-        return Colors.blueAccent;
-      case ConnectionType.wifi:
-        return Colors.tealAccent;
-      case ConnectionType.centralized:
-        return Colors.purpleAccent;
-      default:
-        return Colors.greenAccent;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

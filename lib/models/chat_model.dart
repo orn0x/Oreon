@@ -1,5 +1,8 @@
 import 'dart:typed_data';
 
+import 'package:oreon/models/device_wrapper.dart';
+import 'package:oreon/services/WIFI/lan_module/lan_controller.dart';
+
 enum ConnectionType { wifi, bluetooth, centralized, decentralized }
 
 class Chat {
@@ -15,6 +18,10 @@ class Chat {
   final Uint8List? imageBytes;
   final String? deviceId;
   final Uint8List? avatarImageBytes;
+  final DeviceWrapper? deviceWrapper;
+  final LanController? lanController;
+  final String? ipAddress;
+  final int? port;
 
   Chat({
     required this.identifier,
@@ -29,6 +36,10 @@ class Chat {
     this.imageBytes,
     this.deviceId,
     this.avatarImageBytes,
+    this.deviceWrapper,
+    this.lanController,
+    this.ipAddress,
+    this.port,
   });
 
   // Convert to JSON for storage/transmission
@@ -44,6 +55,9 @@ class Chat {
       'avatarText': avatarText,
       'avatarUrl': avatarUrl,
       'imageBytes': imageBytes?.toString(),
+      'deviceWrapper': deviceWrapper?.toString(),
+      'ipAddress': ipAddress,
+      'port': port,
     };
   }
 
@@ -59,6 +73,9 @@ class Chat {
       connectionType: _connectionTypeFromString(json['connectionType']),
       avatarText: json['avatarText'],
       avatarUrl: json['avatarUrl'],
+      deviceWrapper: json['deviceWrapper'],
+      ipAddress: json['ipAddress'],
+      port: json['port'],
     );
   }
 
@@ -88,6 +105,10 @@ class Chat {
     String? avatarText,
     String? avatarUrl,
     Uint8List? imageBytes,
+    DeviceWrapper? deviceWrapper,
+    LanController? lanController,
+    String? ipAddress,
+    int? port,
   }) {
     return Chat(
       identifier: identifier ?? this.identifier,
@@ -100,6 +121,10 @@ class Chat {
       avatarText: avatarText ?? this.avatarText,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       imageBytes: imageBytes ?? this.imageBytes,
+      deviceWrapper: deviceWrapper ?? this.deviceWrapper,
+      lanController: lanController ?? this.lanController,
+      ipAddress: ipAddress ?? this.ipAddress,
+      port: port ?? this.port,
     );
   }
 }
